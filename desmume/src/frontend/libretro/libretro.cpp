@@ -21,23 +21,6 @@
 #ifdef HAVE_OPENGL
 #include "OGLRender.h"
 #include "OGLRender_3_2.h"
-#if defined(HAVE_PSGL)
-#define RARCH_GL_FRAMEBUFFER GL_FRAMEBUFFER_OES
-#define RARCH_GL_FRAMEBUFFER_COMPLETE GL_FRAMEBUFFER_COMPLETE_OES
-#define RARCH_GL_COLOR_ATTACHMENT0 GL_COLOR_ATTACHMENT0_EXT
-#elif defined(OSX_PPC)
-#define RARCH_GL_FRAMEBUFFER GL_FRAMEBUFFER_EXT
-#define RARCH_GL_FRAMEBUFFER_COMPLETE GL_FRAMEBUFFER_COMPLETE_EXT
-#define RARCH_GL_COLOR_ATTACHMENT0 GL_COLOR_ATTACHMENT0_EXT
-#else
-#define RARCH_GL_FRAMEBUFFER GL_FRAMEBUFFER
-#define RARCH_GL_FRAMEBUFFER_COMPLETE GL_FRAMEBUFFER_COMPLETE
-#define RARCH_GL_COLOR_ATTACHMENT0 GL_COLOR_ATTACHMENT0
-#endif
-
-typedef void (glBindFramebufferProc) (GLenum target, GLuint framebuffer);
-static glBindFramebufferProc *glBindFramebuffer = NULL;
-
 #endif
 
 #define LAYOUT_TOP_BOTTOM                 0
@@ -1184,7 +1167,7 @@ void retro_init (void)
         hw_render.context_type = RETRO_HW_CONTEXT_OPENGL;
         hw_render.cache_context = true; 
         hw_render.context_reset = context_reset;
-        hw_render.bottom_left_origin = true;
+        hw_render.bottom_left_origin = false;
         hw_render.depth = true;
 
         oglrender_init        = dummy_retro_gl_init;
@@ -1211,8 +1194,6 @@ void retro_init (void)
 
     NDS_3D_ChangeCore(GPU3D_SOFTRASTERIZER);
     GPU->SetCustomFramebufferSize (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT);
-
-    printf ("%d\n", GPU->GetDisplayInfo().pixelBytes);
 
     backup_setManualBackupType(MC_TYPE_AUTODETECT);
 
@@ -1255,7 +1236,6 @@ void retro_run (void)
        }
        else 
        {
-          glBindFramebuffer = (glBindFramebufferProc *)hw_render.get_proc_address ("glBindFramebuffer");
           gl_initialized = true;
        }
    }
@@ -1631,23 +1611,7 @@ void retro_run (void)
    if (skipped)
       NDS_SkipNextFrame();
 
-#ifdef HAVE_OPENGL
-   if (opengl_mode)
-   {
-      glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
-      glPushAttrib(GL_ALL_ATTRIB_BITS);
-   }
-#endif
-
    NDS_exec<false>();
-
-#ifdef HAVE_OPENGL
-   if (opengl_mode)
-   {
-      glPopAttrib();
-      glPopClientAttrib();
-   }
-#endif 
 
    SPU_Emulate_user();
 
@@ -1707,62 +1671,10 @@ void retro_run (void)
    if (opengl_mode)
    {
 #ifdef HAVE_OPENGL
-      static GLuint tex = 0;
-      static GLuint pbo = 0;
-      glPushClientAttrib (GL_CLIENT_ALL_ATTRIB_BITS);
-      glPushAttrib (GL_ALL_ATTRIB_BITS);
-
-      glBindFramebuffer(RARCH_GL_FRAMEBUFFER, hw_render.get_current_framebuffer());
-      glDisable (GL_LIGHTING);
-      glDisable (GL_DEPTH_TEST);
-      glDisable (GL_ALPHA_TEST);
-      glDisable (GL_BLEND);
-      glEnable (GL_TEXTURE_2D);
-      glUseProgram (0);
-
-      if (tex == 0)
-        glGenTextures (1, &tex);
-      if (pbo == 0)
-        glGenBuffers (1, &pbo);
-
-      glBindBuffer (GL_PIXEL_UNPACK_BUFFER, pbo);
-      glBufferData (GL_PIXEL_UNPACK_BUFFER, layout.width * layout.height * 2, NULL, GL_STREAM_DRAW);
-      void *pbo_buffer = glMapBuffer (GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
-      memcpy (pbo_buffer, screen_buf, layout.width * layout.height * 2);
-      glUnmapBuffer (GL_PIXEL_UNPACK_BUFFER);
-      glBindTexture (GL_TEXTURE_2D, tex);
-      glPixelStorei (GL_UNPACK_ALIGNMENT, 1);
-      glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, layout.width, layout.height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 0);
-      glBindBuffer (GL_PIXEL_UNPACK_BUFFER, 0);
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-      glViewport(0, 0, layout.width, layout.height);
-      glClearColor (0.0f, 0.0f, 0.0f, 1.0f);
-      glClear(GL_COLOR_BUFFER_BIT);
-
-      glMatrixMode (GL_PROJECTION);
-      glLoadIdentity ();
-      glOrtho (0.0, 1.0, 1.0, 0.0, -1.0, 1.0);
-      glMatrixMode (GL_MODELVIEW);
-      glLoadIdentity ();
-      glBegin (GL_QUADS);
-      glTexCoord2f (0.0f, 0.0f);
-      glVertex2f   (0.0f, 0.0f);
-      glTexCoord2f (0.0f, 1.0f);
-      glVertex2f   (0.0f, 1.0f);
-      glTexCoord2f (1.0f, 1.0f);
-      glVertex2f   (1.0f, 1.0f);
-      glTexCoord2f (1.0f, 0.0f);
-      glVertex2f   (1.0f, 0.0f);
-      glEnd ();  
+      glBindTexture (GL_TEXTURE_2D, hw_render.get_current_framebuffer());
+      glPixelStorei (GL_UNPACK_ALIGNMENT, 1); 
+      glTexSubImage2D (GL_TEXTURE_2D, 0, 0, 0, layout.width, layout.height, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, screen_buf);
       video_cb(skipped ? 0 : RETRO_HW_FRAME_BUFFER_VALID, layout.width, layout.height, 0);
-      glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-      glPopAttrib ();
-      glPopClientAttrib ();
 #endif
    }
    else
