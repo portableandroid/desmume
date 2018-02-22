@@ -28,7 +28,7 @@
 		#include "frontend/windows/winutil.h"
 		#include "frontend/windows/resource.h"
 #elif !defined(DESMUME_COCOA)
-	#include <glib.h>
+        #include "libretro-common/include/file/file_path.h"
 #endif /* HOST_WINDOWS */
 
 #include "time.h"
@@ -140,10 +140,23 @@ public:
 
 		strncpy(pathToModule, pathStr.c_str(), MAX_PATH);
 #else
-		char *cwd = g_build_filename(g_get_user_config_dir(), "desmume", NULL);
-		g_mkdir_with_parents(cwd, 0755);
-		strncpy(pathToModule, cwd, MAX_PATH);
-		g_free(cwd);
+                const char *xdg_config_home = getenv("XDG_CONFIG_HOME");
+                const char *home            = getenv("HOME");
+                std::string pathStr;
+
+                if (xdg_config_home)
+                {
+                    pathStr = std::string(xdg_config_home) + DIRECTORY_DELIMITER_CHAR + "desmume";
+                }
+                else if (home)
+                {
+                    pathStr = std::string(home) + DIRECTORY_DELIMITER_CHAR + ".config/desmume";
+                }
+                else
+                    pathStr = Path::GetFileDirectoryPath(path);
+
+		path_mkdir(pathStr.c_str());
+		strncpy(pathToModule, pathStr.c_str(), MAX_PATH);
 #endif
 	}
 
