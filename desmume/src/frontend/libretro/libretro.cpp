@@ -21,6 +21,16 @@
 #ifdef HAVE_OPENGL
 #include "OGLRender.h"
 #include "OGLRender_3_2.h"
+#if defined(HAVE_PSGL)
+#define RARCH_GL_FRAMEBUFFER GL_FRAMEBUFFER_OES
+#elif defined(OSX_PPC)
+#define RARCH_GL_FRAMEBUFFER GL_FRAMEBUFFER_EXT
+#else
+#define RARCH_GL_FRAMEBUFFER GL_FRAMEBUFFER
+#endif
+
+typedef void (glBindFramebufferProc) (GLenum target, GLuint framebuffer);
+static glBindFramebufferProc *glBindFramebuffer = NULL;
 #endif
 
 #define LAYOUT_TOP_BOTTOM                 0
@@ -1127,25 +1137,10 @@ static void check_system_specs(void)
    environ_cb(RETRO_ENVIRONMENT_SET_PERFORMANCE_LEVEL, &level);
 }
 
-static bool dummy_retro_gl_init (void)
-{
-    return true;
-}
-
-static void dummy_retro_gl_end (void)
-{
-    return;
-}
-
-static bool dummy_retro_gl_begin (void)
-{
-    return true;
-}
-
-static void context_reset(void)
-{
-    return;
-}
+static bool dummy_retro_gl_init() { return true; }
+static void dummy_retro_gl_end() {}
+static bool dummy_retro_gl_begin() { return true; }
+static void context_reset() {}
 
 void retro_init (void)
 {
@@ -1236,6 +1231,7 @@ void retro_run (void)
        }
        else 
        {
+          glBindFramebuffer = (glBindFramebufferProc *)hw_render.get_proc_address ("glBindFramebuffer");
           gl_initialized = true;
        }
    }
@@ -1610,9 +1606,7 @@ void retro_run (void)
 
    if (skipped)
       NDS_SkipNextFrame();
-
    NDS_exec<false>();
-
    SPU_Emulate_user();
 
    if (!skipped)
@@ -1671,10 +1665,16 @@ void retro_run (void)
    if (opengl_mode)
    {
 #ifdef HAVE_OPENGL
-      glBindTexture (GL_TEXTURE_2D, hw_render.get_current_framebuffer());
-      glPixelStorei (GL_UNPACK_ALIGNMENT, 1); 
-      glTexSubImage2D (GL_TEXTURE_2D, 0, 0, 0, layout.width, layout.height, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, screen_buf);
-      video_cb(skipped ? 0 : RETRO_HW_FRAME_BUFFER_VALID, layout.width, layout.height, 0);
+      glBindFramebuffer(RARCH_GL_FRAMEBUFFER, hw_render.get_current_framebuffer());
+      glActiveTexture(GL_TEXTURE0);
+      glClearColor(0.0, 0.0, 0.0, 1.0);
+      glClear(GL_COLOR_BUFFER_BIT);
+      glBindTexture(GL_TEXTURE_2D, hw_render.get_current_framebuffer());
+      glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, layout.width, layout.height, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, screen_buf);
+      video_cb(RETRO_HW_FRAME_BUFFER_VALID, layout.width, layout.height, 0);
+      glBindTexture(GL_TEXTURE_2D, 0);
+      glBindFramebuffer(RARCH_GL_FRAMEBUFFER, 0);
 #endif
    }
    else
