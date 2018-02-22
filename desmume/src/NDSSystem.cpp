@@ -21,7 +21,6 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <math.h>
-#include <compat/zlib.h>
 
 #include <features/features_cpu.h>
 
@@ -658,6 +657,9 @@ static int rom_init_path(const char *filename, const char *physicalName, const c
 struct LastRom {
 	std::string filename, physicalName, logicalFilename;
 } lastRom;
+
+
+unsigned long crc32(unsigned long, const unsigned char *, unsigned int);
 
 int NDS_LoadROM(const char *filename, const char *physicalName, const char *logicalFilename)
 {

@@ -32,7 +32,7 @@ ifneq (,$(findstring unix,$(platform)))
    TARGET := $(TARGET_NAME)_libretro.so
    fpic := -fPIC
    SHARED := -shared -Wl,--no-undefined -Wl,--version-script=$(CORE_DIR)/frontend/libretro/link.T
-   LIBS := -lpthread `pkg-config --libs glib-2.0` -lz -lGL
+   LIBS := -lpthread `pkg-config --libs glib-2.0` -lGL
    CXXFLAGS += `pkg-config --cflags glib-2.0` -DHAVE_OPENGL
 
    ifneq (,$(findstring clang,$(platform)))
