@@ -60,7 +60,6 @@ private:
 	u8					filename[MAX_PATH];
 	u32					currentGet;
 
-	void	clear();
 	void	ARparser(CHEATS_LIST& cheat);
 	char	*clearCode(char *s);
 
@@ -89,6 +88,7 @@ public:
 	u32		getSize();
 	size_t	getActiveCount();
 	void	setDescription(const char *description, u32 pos);
+	void	clear();
 	BOOL	save();
 	BOOL	load();
 	void	process(int targetType);

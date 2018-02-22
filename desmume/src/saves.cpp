@@ -20,6 +20,8 @@
 
 #ifdef HAVE_LIBZ
 #include <zlib.h>
+#else
+#include "compat/zlib.h"
 #endif
 #include <stack>
 #include <set>

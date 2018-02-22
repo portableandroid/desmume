@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <math.h>
-#include <zlib.h>
+#include <compat/zlib.h>
 
 #include <features/features_cpu.h>
 
