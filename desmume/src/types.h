@@ -88,6 +88,7 @@
 	#include <compat/msvc.h>
 
 #else
+	#undef WINAPI
 	#define WINAPI
 #endif
 
@@ -131,8 +132,9 @@
 //---------------------------------------------
 
 #ifdef __MINGW32__
+	#undef FASTCALL
 	#define FASTCALL __attribute__((fastcall))
-	#define ASMJIT_CALL_CONV kX86FuncConvGccFastCall
+	#define ASMJIT_CALL_CONV kX86FuncConvCompatFastCall
 #elif defined (__i386__) && !defined(__clang__)
 	#define FASTCALL __attribute__((regparm(3)))
 	#define ASMJIT_CALL_CONV kX86FuncConvGccRegParm3

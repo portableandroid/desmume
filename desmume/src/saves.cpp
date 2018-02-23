@@ -21,7 +21,7 @@
 #ifdef HAVE_LIBZ
 #include <zlib.h>
 #else
-#include "compat/zlib.h"
+#define Z_NO_COMPRESSION 0
 #endif
 #include <stack>
 #include <set>
@@ -1008,6 +1008,7 @@ bool savestate_save(EMUFILE &outstream, int compressionLevel)
 	u32 comprlen = 0xFFFFFFFF;
 	u8* cbuf;
 
+#ifdef HAVE_ZLIB
 	//compress the data
 	int error = Z_OK;
 	if (compressionLevel != Z_NO_COMPRESSION)
@@ -1023,6 +1024,7 @@ bool savestate_save(EMUFILE &outstream, int compressionLevel)
 		error = compress2(cbuf,&comprlen2,ms.buf(),len,compressionLevel);
 		comprlen = (u32)comprlen2;
 	}
+#endif
 
 	//dump the header
 	outstream.fseek(0,SEEK_SET);
@@ -1032,6 +1034,7 @@ bool savestate_save(EMUFILE &outstream, int compressionLevel)
 	outstream.write_32LE(len); //uncompressed length
 	outstream.write_32LE(comprlen); //compressed length (-1 if it is not compressed)
 
+#ifdef HAVE_ZLIB
 	if (compressionLevel != Z_NO_COMPRESSION)
 	{
 		outstream.fwrite(cbuf,comprlen==(u32)-1?len:comprlen);
@@ -1039,6 +1042,8 @@ bool savestate_save(EMUFILE &outstream, int compressionLevel)
 	}
 
 	return error == Z_OK;
+#endif
+	return true;
 }
 
 bool savestate_save (const char *file_name)

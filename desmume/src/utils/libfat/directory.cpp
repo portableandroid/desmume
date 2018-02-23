@@ -54,6 +54,9 @@ static size_t strnlen(const char *s, size_t n)
 #endif
 
 #endif // __APPLE__
+#if defined(_WIN32) && !defined(_MSC_VER) && !defined(__MINGW64_VERSION_MAJOR)
+#include <malloc.h>
+#endif
 
 // Directory entry codes
 #define DIR_ENTRY_LAST 0x00
@@ -1097,6 +1100,23 @@ bool _FAT_directory_chdir (PARTITION* partition, const char* path) {
 
 	return true;
 }
+#if defined(_WIN32) && !defined(_MSC_VER)
+#ifndef S_IRGRP
+#define S_IRGRP 0
+#endif
+
+#ifndef S_IWGRP
+#define S_IWGRP 0
+#endif
+
+#ifndef S_IROTH
+#define S_IROTH 0
+#endif
+ 
+#ifndef S_IWOTH
+#define S_IWOTH 0
+#endif
+#endif
 
 void _FAT_directory_entryStat (PARTITION* partition, DIR_ENTRY* entry, struct stat *st) {
 	// Fill in the stat struct

@@ -40,7 +40,9 @@
 #ifndef _MSC_VER
 #include <unistd.h>
 #endif
-
+#if defined(_WIN32) && !defined(_MSC_VER)
+#define EOVERFLOW 132
+#endif
 #include "cache.h"
 #include "file_allocation_table.h"
 #include "bit_ops.h"

@@ -34,7 +34,15 @@
 
 #ifndef _MSC_VER
 #include <unistd.h>
+#ifndef __LIBRETRO__
 #include <sys/dir.h>
+#endif
+#endif
+
+#if defined(_WIN32) && !defined(_MSC_VER)
+#ifndef ENOTSUP
+#define ENOTSUP 134
+#endif
 #endif
 
 #include "fatdir.h"

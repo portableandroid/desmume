@@ -25,7 +25,7 @@
 #include <zzip/zzip.h>
 #endif
 
-#ifdef WIN32
+#if defined(_WIN32) && defined(_MSVC_VER) 
 #define stat(...) _stat(__VA_ARGS__)
 #define S_IFMT _S_IFMT
 #define S_IFREG _S_IFREG

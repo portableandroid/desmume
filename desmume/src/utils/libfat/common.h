@@ -35,6 +35,10 @@
 #include <stdint.h>
 #endif
 
+#ifdef __MINGW32__
+#include <malloc.h>
+#endif
+
 // When compiling for NDS, make sure NDS is defined
 #ifndef NDS
  #if defined ARM9 || defined ARM7

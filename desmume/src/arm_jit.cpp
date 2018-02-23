@@ -24,9 +24,8 @@
 #error "ERROR: JIT compiler - unsupported target platform"
 #endif
 
-#ifdef HOST_WINDOWS
+#ifndef _WIN32
 // **** Windows port
-#else
 #include <sys/mman.h>
 #include <errno.h>
 #include <unistd.h>

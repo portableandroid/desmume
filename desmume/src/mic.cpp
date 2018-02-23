@@ -18,7 +18,7 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#if !defined(WIN32)
+#if !defined(_WIN32) || defined(__LIBRETRO__)
 
 #include <stdlib.h>
 #include "mic.h"

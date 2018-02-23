@@ -18,12 +18,12 @@
 
 #include "types.h"
 
-#ifdef HOST_WINDOWS
+#ifdef _WIN32 
 	#include <winsock2.h>
 	#include <ws2tcpip.h>
 	#define socket_t    SOCKET 	 
 	#define sockaddr_t  SOCKADDR
-	#include "windriver.h"
+	#include "frontend/windows/windriver.h"
 	#define PCAP_DEVICE_NAME description
 #else
 	#include <unistd.h>
