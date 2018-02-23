@@ -34,6 +34,7 @@ ifneq (,$(findstring unix,$(platform)))
    SHARED := -shared -Wl,--no-undefined -Wl,--version-script=$(CORE_DIR)/frontend/libretro/link.T
    LIBS := -lpthread -lGL
    CXXFLAGS += -DHAVE_OPENGL
+   DESMUME_OPENGL = 1
 
    ifneq (,$(findstring clang,$(platform)))
       CC = clang
@@ -299,6 +300,7 @@ else
    ifeq ($(DEBUG), 0)
       SHARED += -s
    endif
+   DESMUME_OPENGL = 1
    DESMUME_JIT = 1
    HAVE_DIRENT_WIN = 1
 

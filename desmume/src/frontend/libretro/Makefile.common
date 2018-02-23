@@ -21,8 +21,6 @@ SOURCES_CXX := \
 	$(CORE_DIR)/wifi.cpp \
 	$(CORE_DIR)/MMU.cpp \
 	$(CORE_DIR)/NDSSystem.cpp \
-        $(CORE_DIR)/OGLRender.cpp \
-        $(CORE_DIR)/OGLRender_3_2.cpp \
 	$(CORE_DIR)/render3D.cpp \
 	$(CORE_DIR)/rtc.cpp \
 	$(CORE_DIR)/saves.cpp \
@@ -73,6 +71,13 @@ SOURCES_CXX := \
 	$(CORE_DIR)/driver.cpp \
 	$(CORE_DIR)/frontend/libretro/libretro.cpp \
         $(CORE_DIR)/frontend/libretro/scrc32.cpp
+
+ifeq ($(DESMUME_OPENGL),1)
+SOURCES_CXX += \
+        $(CORE_DIR)/OGLRender.cpp \
+        $(CORE_DIR)/OGLRender_3_2.cpp 
+endif
+
 SOURCES_C := \
 	$(CORE_DIR)/utils/libfat/partition.c \
 	$(CORE_DIR)/utils/libfat/cache.c \
