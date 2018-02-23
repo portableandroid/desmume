@@ -1159,7 +1159,9 @@ void retro_init (void)
 #ifdef HAVE_OPENGL
     if (opengl_mode)
     {
-        hw_render.context_type = RETRO_HW_CONTEXT_OPENGL;
+        hw_render.context_type = RETRO_HW_CONTEXT_OPENGL_CORE;
+        hw_render.version_major = 3;
+        hw_render.version_minor = 3;
         hw_render.cache_context = true; 
         hw_render.context_reset = context_reset;
         hw_render.bottom_left_origin = false;
@@ -1516,6 +1518,7 @@ void retro_run (void)
   
 
    // BUTTONS
+   NDS_beginProcessingInput();
 
    NDS_setPad(
          input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT),
@@ -1534,8 +1537,6 @@ void retro_run (void)
          input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2) //Lid
          );
 
-   NDS_beginProcessingInput();
-   
    if (!microphone_force_enable)
    {
       if(input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3))
@@ -1665,16 +1666,20 @@ void retro_run (void)
    if (opengl_mode)
    {
 #ifdef HAVE_OPENGL
-      glBindFramebuffer(RARCH_GL_FRAMEBUFFER, hw_render.get_current_framebuffer());
-      glActiveTexture(GL_TEXTURE0);
-      glClearColor(0.0, 0.0, 0.0, 1.0);
-      glClear(GL_COLOR_BUFFER_BIT);
-      glBindTexture(GL_TEXTURE_2D, hw_render.get_current_framebuffer());
-      glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, layout.width, layout.height, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, screen_buf);
-      video_cb(RETRO_HW_FRAME_BUFFER_VALID, layout.width, layout.height, 0);
-      glBindTexture(GL_TEXTURE_2D, 0);
-      glBindFramebuffer(RARCH_GL_FRAMEBUFFER, 0);
+      if (!skipped)
+      {
+         glBindFramebuffer(RARCH_GL_FRAMEBUFFER, hw_render.get_current_framebuffer());
+         glActiveTexture(GL_TEXTURE0);
+         glClearColor(0.0, 0.0, 0.0, 1.0);
+         glClear(GL_COLOR_BUFFER_BIT);
+         glBindTexture(GL_TEXTURE_2D, hw_render.get_current_framebuffer());
+         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, layout.width, layout.height, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, screen_buf);
+         glBindTexture(GL_TEXTURE_2D, 0);
+         glBindFramebuffer(RARCH_GL_FRAMEBUFFER, 0);
+      }
+      
+      video_cb(skipped ? 0 : RETRO_HW_FRAME_BUFFER_VALID, layout.width, layout.height, 0);
 #endif
    }
    else
