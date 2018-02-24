@@ -311,7 +311,7 @@ ifeq ($(DESMUME_JIT_ARM),1)
 endif
 
 ifeq ($(DESMUME_JIT),1)
-   CXXFLAGS += -DHAVE_JIT
+   CXXFLAGS += -DHAVE_JIT -DJIT_FUNCS_FLAT
 endif
 
 include Makefile.common
