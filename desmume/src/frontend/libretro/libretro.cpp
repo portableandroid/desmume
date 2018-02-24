@@ -984,6 +984,7 @@ static void check_variables(bool first_boot)
    }
 }
 
+#define GPU3D_NULL           0
 #define GPU3D_SOFTRASTERIZER 1
 #define GPU3D_OPENGL_AUTO    2
 
@@ -1140,7 +1141,31 @@ static void check_system_specs(void)
 static bool dummy_retro_gl_init() { return true; }
 static void dummy_retro_gl_end() {}
 static bool dummy_retro_gl_begin() { return true; }
-static void context_reset() {}
+
+static bool context_needs_reinit = false;
+
+static void context_destroy() 
+{
+   NDS_3D_ChangeCore(GPU3D_NULL);
+
+   context_needs_reinit = true;
+}
+
+static void context_reset() { 
+   if (!context_needs_reinit)
+      return;
+
+   if (opengl_mode)
+   {
+      if (NDS_3D_ChangeCore(GPU3D_OPENGL_AUTO))
+         return;
+      opengl_mode = false;
+   }
+   
+   NDS_3D_ChangeCore(GPU3D_SOFTRASTERIZER);
+   context_needs_reinit = false;
+}
+
 
 void retro_init (void)
 {
@@ -1162,6 +1187,7 @@ void retro_init (void)
         hw_render.context_type = RETRO_HW_CONTEXT_OPENGL;
         hw_render.cache_context = false; 
         hw_render.context_reset = context_reset;
+        hw_render.context_destroy = context_destroy;
         hw_render.bottom_left_origin = false;
         hw_render.depth = true;
 
