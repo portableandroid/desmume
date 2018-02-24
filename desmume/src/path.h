@@ -33,7 +33,7 @@
 
 #include "time.h"
 
-#ifdef HOST_WINDOWS
+#ifdef _WIN32
 	#define FILE_EXT_DELIMITER_CHAR		'.'
 	#define DIRECTORY_DELIMITER_CHAR	'\\'
 	#define ALL_DIRECTORY_DELIMITER_STRING "/\\"
@@ -41,6 +41,12 @@
 	#define FILE_EXT_DELIMITER_CHAR		'.'
 	#define DIRECTORY_DELIMITER_CHAR	'/'
 	#define ALL_DIRECTORY_DELIMITER_STRING "/"
+#endif
+
+#ifdef __LIBRETRO__
+#include "libretro-common/include/libretro.h"
+extern retro_log_printf_t log_cb;
+extern retro_environment_t environ_cb;
 #endif
 
 #ifdef HOST_WINDOWS
@@ -139,6 +145,29 @@ public:
 		std::string pathStr = Path::GetFileDirectoryPath(path);
 
 		strncpy(pathToModule, pathStr.c_str(), MAX_PATH);
+#elif defined(__LIBRETRO__)
+		const char *saveDir = 0;
+		environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &saveDir);
+#if !defined(VITA)
+		strncpy(pathToModule, saveDir ? saveDir : ".", MAX_PATH);
+#else
+		strncpy(pathToModule, saveDir ? saveDir : "", MAX_PATH);
+#endif
+	        if(saveDir == 0 && log_cb)
+	        {
+	           log_cb(RETRO_LOG_WARN, "Save directory is not defined. Fallback on using SYSTEM directory ...\n");
+
+		   const char* systemDir = 0;
+                   environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &systemDir);
+#if !defined(VITA)
+	           strncpy(pathToModule, systemDir ? systemDir : ".", MAX_PATH);
+#else
+	           strncpy(pathToModule, systemDir ? systemDir : "", MAX_PATH);
+#endif
+	           if(systemDir == 0 && log_cb)
+        	       log_cb(RETRO_LOG_WARN, "System directory is not defined. Fallback to ROM dir\n");	  
+
+      		}
 #else
                 const char *xdg_config_home = getenv("XDG_CONFIG_HOME");
                 const char *home            = getenv("HOME");
@@ -150,7 +179,7 @@ public:
                 }
                 else if (home)
                 {
-                    pathStr = std::string(home) + DIRECTORY_DELIMITER_CHAR + ".config/desmume";
+                    pathStr = std::string(home) + DIRECTORY_DELIMITER_CHAR + ".config" + DIRECTORY_DELIMITER_CHAR + "desmume";
                 }
                 else
                     pathStr = Path::GetFileDirectoryPath(path);

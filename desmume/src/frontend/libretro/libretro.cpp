@@ -1159,10 +1159,8 @@ void retro_init (void)
 #ifdef HAVE_OPENGL
     if (opengl_mode)
     {
-        hw_render.context_type = RETRO_HW_CONTEXT_OPENGL_CORE;
-        hw_render.version_major = 3;
-        hw_render.version_minor = 3;
-        hw_render.cache_context = true; 
+        hw_render.context_type = RETRO_HW_CONTEXT_OPENGL;
+        hw_render.cache_context = false; 
         hw_render.context_reset = context_reset;
         hw_render.bottom_left_origin = false;
         hw_render.depth = true;
