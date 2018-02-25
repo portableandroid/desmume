@@ -866,12 +866,8 @@ static void check_variables(bool first_boot)
    {
       if (!strcmp(var.value, "internal"))
          CommonSettings.micMode = TCommonSettings::InternalNoise;
-      else if(!strcmp(var.value, "sample"))
-         CommonSettings.micMode = TCommonSettings::Sample;
       else if(!strcmp(var.value, "random"))
          CommonSettings.micMode = TCommonSettings::Random;
-      else if(!strcmp(var.value, "physical"))
-         CommonSettings.micMode = TCommonSettings::Physical;
    }
    else
       CommonSettings.micMode = TCommonSettings::InternalNoise;
@@ -1077,7 +1073,7 @@ void retro_set_environment(retro_environment_t cb)
       { "desmume_gfx_linehack", "Enable Line Hack; enabled|disabled" },
       { "desmume_gfx_txthack", "Enable TXT Hack; disabled|enabled"},
       { "desmume_mic_force_enable", "Force Microphone Enable; disabled|enabled" },
-      { "desmume_mic_mode", "Microphone Simulation Settings; internal|sample|random|physical" },
+      { "desmume_mic_mode", "Microphone Simulation Settings; internal|random" },
 	  { 0, 0 }
    };
 
