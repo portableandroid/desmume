@@ -117,17 +117,6 @@ static u8 Mic_DefaultBufferRead(void)
 	return theSample;
 }
 
-u8 Mic_ReadSample(void)
-{
-	// All mic modes other than Physical must have the mic hotkey pressed in order
-	// to work.
-	if (CommonSettings.micMode != TCommonSettings::Physical && !Mic_GetActivate()) {
-		return MIC_NULL_SAMPLE_VALUE;
-	}
-
-	return Mic_DefaultBufferRead();
-}
-
 static void Mic_DefaultBufferWrite(u8 theSample)
 {
 	if (micSampleBuffer == NULL || Mic_IsBufferFull()) {
@@ -167,6 +156,27 @@ static u8 Mic_GenerateWhiteNoiseSample(void)
 
 static u8 Mic_GenerateNullSample(void)
 {
+	return MIC_NULL_SAMPLE_VALUE;
+}
+
+u8 Mic_ReadSample(void)
+{
+	// All mic modes other than Physical must have the mic hotkey pressed in order
+	// to work.
+	if (CommonSettings.micMode == TCommonSettings::Physical) 
+        {
+		return Mic_DefaultBufferRead();
+	}
+
+        if (Mic_GetActivate())
+        {
+                if (CommonSettings.micMode == TCommonSettings::InternalNoise)
+                        return Mic_GenerateInternalNoiseSample();
+
+                if (CommonSettings.micMode == TCommonSettings::Random)
+                        return Mic_GenerateWhiteNoiseSample();
+        }
+        
 	return MIC_NULL_SAMPLE_VALUE;
 }
 

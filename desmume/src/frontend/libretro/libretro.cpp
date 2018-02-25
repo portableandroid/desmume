@@ -1077,7 +1077,7 @@ void retro_set_environment(retro_environment_t cb)
       { "desmume_gfx_linehack", "Enable Line Hack; enabled|disabled" },
       { "desmume_gfx_txthack", "Enable TXT Hack; disabled|enabled"},
       { "desmume_mic_force_enable", "Force Microphone Enable; disabled|enabled" },
-      { "desmume_mic_mode", "Microphone Simulation Settings; internal|sample|random|physical" },
+      { "desmume_mic_mode", "Microphone Simulation Settings; internal|random" },
 	  { 0, 0 }
    };
 
