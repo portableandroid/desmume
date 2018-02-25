@@ -110,11 +110,22 @@ static u8 Mic_DefaultBufferRead(void)
 	micBufferFillCount--;
 
 	// Move the pointer back to start if we reach the end of the memory block.
-        if (micReadPosition >= (micSampleBuffer + MIC_BUFFER_SIZE)) {
-                micReadPosition = micSampleBuffer;
-        }
+	if (micReadPosition >= (micSampleBuffer + MIC_BUFFER_SIZE)) {
+		micReadPosition = micSampleBuffer;
+	}
 
-        return theSample;
+	return theSample;
+}
+
+u8 Mic_ReadSample(void)
+{
+	// All mic modes other than Physical must have the mic hotkey pressed in order
+	// to work.
+	if (CommonSettings.micMode != TCommonSettings::Physical && !Mic_GetActivate()) {
+		return MIC_NULL_SAMPLE_VALUE;
+	}
+
+	return Mic_DefaultBufferRead();
 }
 
 static void Mic_DefaultBufferWrite(u8 theSample)
@@ -157,41 +168,6 @@ static u8 Mic_GenerateWhiteNoiseSample(void)
 static u8 Mic_GenerateNullSample(void)
 {
 	return MIC_NULL_SAMPLE_VALUE;
-}
-
-u8 Mic_ReadSample(void)
-{
-        // All mic modes other than Physical must have the mic hotkey pressed in order
-        // to work.
-        if (CommonSettings.micMode == TCommonSettings::Physical && Mic_GetActivate())
-        {
-                return Mic_DefaultBufferRead();
-        }
-        else
-        {
-                if (Mic_GetActivate())
-                {
-                        if (CommonSettings.micMode == TCommonSettings::InternalNoise)
-                        {
-                                while (micBufferFillCount < MIC_MAX_BUFFER_SAMPLES)
-                                        Mic_DefaultBufferWrite(Mic_GenerateInternalNoiseSample());
-                        }
-                        else if (CommonSettings.micMode == TCommonSettings::Random)
-                        {
-                                while (micBufferFillCount < MIC_MAX_BUFFER_SAMPLES)
-                                        Mic_DefaultBufferWrite(Mic_GenerateWhiteNoiseSample());
-                        }
-                        else if (CommonSettings.micMode == TCommonSettings::Sample)
-                        {
-                                // TODO
-                                return MIC_NULL_SAMPLE_VALUE;
-                        }
-                }
-                else
-                {
-                        return MIC_NULL_SAMPLE_VALUE;
-                }
-        }
 }
 
 void Mic_DoNoise(BOOL noise)
