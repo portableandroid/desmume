@@ -35,6 +35,7 @@ ifneq (,$(findstring unix,$(platform)))
    LIBS := -lpthread -lGL
    CXXFLAGS += -DHAVE_OPENGL
    DESMUME_OPENGL = 1
+	DESMUME_OPENGL_CORE = 1
 
    ifneq (,$(findstring clang,$(platform)))
       CC = clang
@@ -79,6 +80,7 @@ else ifeq ($(platform), osx)
       CXXFLAGS += $(ARCHFLAGS)
       LDFLAGS += $(ARCHFLAGS)
    endif
+	DESMUME_OPENGL = 1
 
 # iOS
 else ifneq (,$(findstring ios,$(platform)))
@@ -301,6 +303,7 @@ else
       SHARED += -s
    endif
    DESMUME_OPENGL = 1
+	DESMUME_OPENGL_CORE = 1
    DESMUME_JIT = 1
    HAVE_DIRENT_WIN = 1
 

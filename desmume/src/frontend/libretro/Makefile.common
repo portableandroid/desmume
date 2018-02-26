@@ -73,9 +73,11 @@ SOURCES_CXX := \
         $(CORE_DIR)/frontend/libretro/scrc32.cpp
 
 ifeq ($(DESMUME_OPENGL),1)
-SOURCES_CXX += \
-        $(CORE_DIR)/OGLRender.cpp \
-        $(CORE_DIR)/OGLRender_3_2.cpp 
+SOURCES_CXX += $(CORE_DIR)/OGLRender.cpp
+endif
+
+ifeq ($(DESMUME_OPENGL_CORE),1)
+SOURCES_CXX += $(CORE_DIR)/OGLRender_3_2.cpp 
 endif
 
 SOURCES_C := \
