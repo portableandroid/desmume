@@ -1102,7 +1102,8 @@ void retro_set_environment(retro_environment_t cb)
 
    static const retro_variable values[] =
    {
-      { "desmume_internal_resolution", "Internal resolution (restart); 256x192|512x384|768x576|1024x768|1280x960|1536x1152|1792x1344|2048x1536|2304x1728|2560x1920" },
+      { "desmume_firmware_language", "Firmware language; Auto|English|Japanese|French|German|Italian|Spanish" },
+      { "desmume_load_to_memory", "Load Game into Memory (restart); disabled|enabled" },
       { "desmume_num_cores", "CPU cores; 1|2|3|4" },
 #ifdef HAVE_JIT
 #if defined(IOS) || defined(ANDROID)
@@ -1110,42 +1111,41 @@ void retro_set_environment(retro_environment_t cb)
 #else
       { "desmume_cpu_mode", "CPU mode; jit|interpreter" },
 #endif
-      { "desmume_jit_block_size", "JIT block size; 12|11|10|9|8|7|6|5|4|3|2|1|0|100|99|98|97|96|95|94|93|92|91|90|89|88|87|86|85|84|83|82|81|80|79|78|77|76|75|74|73|72|71|70|69|68|67|66|65|64|63|62|61|60|59|58|57|56|55|54|53|52|51|50|49|48|47|46|45|44|43|42|41|40|39|38|37|36|35|34|33|32|31|30|29|28|27|26|25|24|23|22|21|20|19|18|17|16|15|14|13" },
+      { "desmume_jit_block_size", "JIT block size; 12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100|0|1|2|3|4|5|6|7|8|9|10|11" },
 #else
       { "desmume_cpu_mode", "CPU mode; interpreter" },
 #endif
+      { "desmume_advanced_timing", "Enable Advanced Bus-Level Timing; enabled|disabled" },
+      { "desmume_frameskip", "Frameskip; 0|1|2|3|4|5|6|7|8|9" },
+      { "desmume_internal_resolution", "Internal resolution (restart); 256x192|512x384|768x576|1024x768|1280x960|1536x1152|1792x1344|2048x1536|2304x1728|2560x1920" },
 #ifdef HAVE_OPENGL
       { "desmume_opengl_mode", "OpenGL Rasterizer (restart); disabled|enabled" },
+      { "desmume_gfx_multisampling", "GL Multisampling; disabled|enabled" },
+      { "desmume_gfx_texture_smoothing", "GL Enable texture smoothing; disabled|enabled" },
 #endif
+      { "desmume_gfx_texture_scaling", "Texture scaling (xBrz); 1|2|4" },
+      { "desmume_gfx_texture_deposterize", "Texture deposterize; disabled|enabled" },
+      { "desmume_gfx_highres_interpolate_color", "High Resolution interpolate colors; disabled|enabled" },
+      { "desmume_gfx_edgemark", "Enable Edgemark; enabled|disabled" },
+      { "desmume_gfx_linehack", "Enable Line Hack; enabled|disabled" },
+      { "desmume_gfx_txthack", "Enable TXT Hack; disabled|enabled"},
       { "desmume_screens_layout", "Screen layout; top/bottom|bottom/top|left/right|right/left|top only|bottom only|quick switch|hybrid/top|hybrid/bottom" },
-	  { "desmume_hybrid_layout_scale", "Hybrid layout scale (restart); 1|3"},
-	  { "desmume_hybrid_showboth_screens", "Hybrid layout show both screens; enabled|disabled"},
-	  { "desmume_hybrid_cursor_always_smallscreen", "Hybrid layout cursor always on small screen; enabled|disabled"},
+      { "desmume_screens_gap", "Screen Gap; 0|5|64|90|0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100" },
+      { "desmume_hybrid_layout_scale", "Hybrid layout scale (restart); 1|3"},
+      { "desmume_hybrid_showboth_screens", "Hybrid layout show both screens; enabled|disabled"},
+      { "desmume_hybrid_cursor_always_smallscreen", "Hybrid layout cursor always on small screen; enabled|disabled"},
       { "desmume_pointer_mouse", "Enable mouse/pointer; enabled|disabled" },
       { "desmume_pointer_type", "Pointer type; mouse|touch" },
-	  { "desmume_pointer_colour", "Pointer Colour; white|black|red|blue|yellow"},
       { "desmume_pointer_device_l", "Pointer mode l-analog; none|emulated|absolute|pressed" },
       { "desmume_pointer_device_r", "Pointer mode r-analog; none|emulated|absolute|pressed" },
       { "desmume_pointer_device_deadzone", "Emulated pointer deadzone percent; 15|20|25|30|35|0|5|10" },
       { "desmume_pointer_device_acceleration_mod", "Emulated pointer acceleration modifier percent; 0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100" },
       { "desmume_pointer_stylus_pressure", "Emulated stylus pressure modifier percent; 50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100|0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|" },
       { "desmume_pointer_stylus_jitter", "Enable emulated stylus jitter; disabled|enabled"},
-      { "desmume_load_to_memory", "Load Game into Memory (restart); disabled|enabled" },
-      { "desmume_advanced_timing", "Enable Advanced Bus-Level Timing; enabled|disabled" },
-      { "desmume_firmware_language", "Firmware language; Auto|English|Japanese|French|German|Italian|Spanish" },
-      { "desmume_frameskip", "Frameskip; 0|1|2|3|4|5|6|7|8|9" },
-      { "desmume_screens_gap", "Screen Gap; 0|5|64|90|0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100" },
-      { "desmume_gfx_highres_interpolate_color", "High Resolution interpolate colors; disabled|enabled" },
-      { "desmume_gfx_texture_smoothing", "Enable texture smoothing; disabled|enabled" },
-      { "desmume_gfx_texture_deposterize", "Texture deposterize; disabled|enabled" },
-      { "desmume_gfx_texture_scaling", "Texture scaling (xBrz); 1|2|4" },
-      { "desmume_gfx_multisampling", "Multisampling; disabled|enabled" },
-      { "desmume_gfx_edgemark", "Enable Edgemark; enabled|disabled" },
-      { "desmume_gfx_linehack", "Enable Line Hack; enabled|disabled" },
-      { "desmume_gfx_txthack", "Enable TXT Hack; disabled|enabled"},
+      { "desmume_pointer_colour", "Pointer Colour; white|black|red|blue|yellow"},
       { "desmume_mic_force_enable", "Force Microphone Enable; disabled|enabled" },
       { "desmume_mic_mode", "Microphone Simulation Settings; internal|random" },
-	  { 0, 0 }
+      { 0, 0 }
    };
 
    environ_cb(RETRO_ENVIRONMENT_SET_VARIABLES, (void*)values);
