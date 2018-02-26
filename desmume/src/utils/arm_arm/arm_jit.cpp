@@ -33,6 +33,7 @@ using namespace arm_gen;
 #include "MMU.h"
 #include "MMU_timing.h"
 #include "arm_jit.h"
+#include "utils/bits.h"
 #include "bios.h"
 #include "armcpu.h"
 
