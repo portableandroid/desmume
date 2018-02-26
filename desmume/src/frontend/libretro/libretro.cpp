@@ -21,16 +21,22 @@
 #ifdef HAVE_OPENGL
 #include "OGLRender.h"
 #include "OGLRender_3_2.h"
-#if defined(HAVE_PSGL)
-#define RARCH_GL_FRAMEBUFFER GL_FRAMEBUFFER_OES
-#elif defined(OSX_PPC)
-#define RARCH_GL_FRAMEBUFFER GL_FRAMEBUFFER_EXT
-#else
-#define RARCH_GL_FRAMEBUFFER GL_FRAMEBUFFER
-#endif
 
-typedef void (glBindFramebufferProc) (GLenum target, GLuint framebuffer);
+static GLuint pbo = 0;
+static GLuint fbo = 0;
+static GLuint tex = 0;
+
+typedef void (glBindFramebufferProc) (GLenum, GLuint);
 static glBindFramebufferProc *glBindFramebuffer = NULL;
+typedef void (glGenFramebuffersProc) (GLsizei, GLuint *);
+static glGenFramebuffersProc *glGenFramebuffers = NULL;
+typedef void (glDeleteFramebuffersProc) (GLsizei, GLuint *);
+static glDeleteFramebuffersProc *glDeleteFramebuffers = NULL;
+typedef void (glFramebufferTexture2DProc) (GLenum, GLenum, GLenum, GLuint, GLint);
+static glFramebufferTexture2DProc *glFramebufferTexture2D = NULL;
+typedef void (glBlitFramebufferProc) (GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
+static glBlitFramebufferProc *glBlitFramebuffer = NULL;
+
 #endif
 
 #define LAYOUT_TOP_BOTTOM                 0
@@ -1144,9 +1150,41 @@ static bool dummy_retro_gl_begin() { return true; }
 
 static bool context_needs_reinit = false;
 
+static bool initialize_gl()
+{
+    OGLLoadEntryPoints_3_2_Func = OGLLoadEntryPoints_3_2;
+    OGLCreateRenderer_3_2_Func = OGLCreateRenderer_3_2; 
+    
+    if (!NDS_3D_ChangeCore(GPU3D_OPENGL_AUTO))
+    {
+        log_cb(RETRO_LOG_WARN, "Failed to change to OpenGL core!");
+        opengl_mode = false;
+        NDS_3D_ChangeCore(GPU3D_SOFTRASTERIZER);
+        return false;
+    }
+    glBindFramebuffer = (glBindFramebufferProc *) hw_render.get_proc_address ("glBindFramebuffer");
+    glGenFramebuffers = (glGenFramebuffersProc *) hw_render.get_proc_address ("glGenFramebuffers");
+    glDeleteFramebuffers = (glDeleteFramebuffersProc *) hw_render.get_proc_address ("glDeleteFramebuffers");
+    glFramebufferTexture2D = (glFramebufferTexture2DProc *) hw_render.get_proc_address ("glFramebufferTexture2D");
+    glBlitFramebuffer = (glBlitFramebufferProc *) hw_render.get_proc_address ("glBlitFramebuffer");
+
+    if (!glBindFramebuffer || !glGenFramebuffers || !glDeleteFramebuffers || !glFramebufferTexture2D || !glBlitFramebuffer)
+    {
+        log_cb(RETRO_LOG_WARN, "Don't have required OpenGL functions."); 
+        opengl_mode = false;
+        NDS_3D_ChangeCore(GPU3D_SOFTRASTERIZER);
+        return false;
+    }
+
+    return true;
+}
+
 static void context_destroy() 
 {
    NDS_3D_ChangeCore(GPU3D_NULL);
+#ifdef HAVE_OPENGL
+   pbo = fbo = tex = 0;
+#endif
 
    context_needs_reinit = true;
 }
@@ -1155,14 +1193,8 @@ static void context_reset() {
    if (!context_needs_reinit)
       return;
 
-   if (opengl_mode)
-   {
-      if (NDS_3D_ChangeCore(GPU3D_OPENGL_AUTO))
-         return;
-      opengl_mode = false;
-   }
-   
-   NDS_3D_ChangeCore(GPU3D_SOFTRASTERIZER);
+   initialize_gl();
+
    context_needs_reinit = false;
 }
 
@@ -1224,6 +1256,23 @@ void retro_init (void)
 
 void retro_deinit(void)
 {
+#ifdef HAVE_OPENGL
+    if (pbo)
+    {
+       glDeleteBuffers(1, &pbo);
+       pbo = 0;
+    }
+    if (fbo)
+    {
+       glDeleteFramebuffers(1, &fbo);
+       fbo = 0;
+    }
+    if (tex)
+    {
+       glDeleteTextures(1, &tex);
+       tex = 0;
+    }
+#endif
     NDS_DeInit();
 
 #ifdef PERF_TEST
@@ -1247,19 +1296,7 @@ void retro_run (void)
    
    if (!gl_initialized && opengl_mode)
    {
-       OGLLoadEntryPoints_3_2_Func = OGLLoadEntryPoints_3_2;
-       OGLCreateRenderer_3_2_Func = OGLCreateRenderer_3_2; 
-       if (!NDS_3D_ChangeCore (GPU3D_OPENGL_AUTO))
-       {
-          printf ("Failed to change to OpenGL core!\n");
-          opengl_mode = false;
-          NDS_3D_ChangeCore (GPU3D_SOFTRASTERIZER);
-       }
-       else 
-       {
-          glBindFramebuffer = (glBindFramebufferProc *)hw_render.get_proc_address ("glBindFramebuffer");
-          gl_initialized = true;
-       }
+          gl_initialized = initialize_gl();
    }
 #endif
 
@@ -1630,7 +1667,9 @@ void retro_run (void)
 
    if (skipped)
       NDS_SkipNextFrame();
+
    NDS_exec<false>();
+
    SPU_Emulate_user();
 
    if (!skipped)
@@ -1691,15 +1730,44 @@ void retro_run (void)
 #ifdef HAVE_OPENGL
       if (!skipped)
       {
-         glBindFramebuffer(RARCH_GL_FRAMEBUFFER, hw_render.get_current_framebuffer());
-         glActiveTexture(GL_TEXTURE0);
-         glClearColor(0.0, 0.0, 0.0, 1.0);
-         glClear(GL_COLOR_BUFFER_BIT);
-         glBindTexture(GL_TEXTURE_2D, hw_render.get_current_framebuffer());
-         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, layout.width, layout.height, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, screen_buf);
-         glBindTexture(GL_TEXTURE_2D, 0);
-         glBindFramebuffer(RARCH_GL_FRAMEBUFFER, 0);
+          glActiveTexture(GL_TEXTURE0);
+          glUseProgram(0);
+
+          if (pbo == 0)
+              glGenBuffers(1, &pbo);
+          if (fbo == 0)
+              glGenFramebuffers(1, &fbo);
+          if (tex == 0)
+              glGenTextures(1, &tex);
+          
+          /* Upload data via pixel-buffer object */
+          glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
+          glBufferData(GL_PIXEL_UNPACK_BUFFER, layout.width * layout.height * 2, NULL, GL_STREAM_DRAW);
+          void *pbo_buffer = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY | GL_MAP_UNSYNCHRONIZED_BIT);
+          memcpy(pbo_buffer, screen_buf, layout.width * layout.height * 2);
+          glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+
+          glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+          glBindTexture(GL_TEXTURE_2D, tex);
+          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, layout.width, layout.height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 0);
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+          glBindFramebuffer(GL_FRAMEBUFFER, hw_render.get_current_framebuffer());
+          glClearColor(0.0, 0.0, 0.0, 1.0);
+          glClear(GL_COLOR_BUFFER_BIT);
+
+          glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+          glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+          
+          glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+          glBindFramebuffer(GL_DRAW_FRAMEBUFFER, hw_render.get_current_framebuffer());
+          glBlitFramebuffer(0, 0, layout.width, layout.height, 0, 0, layout.width, layout.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+          glBindTexture(GL_TEXTURE_2D, 0);
+          glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+          glBindFramebuffer(GL_FRAMEBUFFER, 0);  
       }
       
       video_cb(skipped ? 0 : RETRO_HW_FRAME_BUFFER_VALID, layout.width, layout.height, 0);
