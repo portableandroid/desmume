@@ -26,6 +26,9 @@ static GLuint pbo = 0;
 static GLuint fbo = 0;
 static GLuint tex = 0;
 
+static GLuint current_texture_width = 0;
+static GLuint current_texture_height = 0;
+
 typedef void (glBindFramebufferProc) (GLenum, GLuint);
 static glBindFramebufferProc *glBindFramebuffer = NULL;
 typedef void (glGenFramebuffersProc) (GLsizei, GLuint *);
@@ -1244,7 +1247,7 @@ static void context_destroy()
 {
    NDS_3D_ChangeCore(GPU3D_NULL);
 #ifdef HAVE_OPENGL
-   pbo = fbo = tex = 0;
+   pbo = fbo = tex = current_texture_width = current_texture_height = 0;
 #endif
 
    context_needs_reinit = true;
@@ -1788,11 +1791,22 @@ void retro_run (void)
 
           glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
           glBindTexture(GL_TEXTURE_2D, tex);
-          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, layout.width, layout.height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 0);
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+          
+          if (current_texture_width != layout.width || current_texture_height != layout.height)
+          {
+             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, layout.width, layout.height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 0);
+             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+             current_texture_width = layout.width;
+             current_texture_height = layout.height;
+          }
+          else
+          {
+             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, layout.width, layout.height, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 0);
+          }
 
           glBindFramebuffer(GL_FRAMEBUFFER, hw_render.get_current_framebuffer());
           glClearColor(0.0, 0.0, 0.0, 1.0);
