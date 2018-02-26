@@ -1213,28 +1213,6 @@ void retro_init (void)
 
     check_variables(true);
 
-#ifdef HAVE_OPENGL
-    if (opengl_mode)
-    {
-        hw_render.context_type = RETRO_HW_CONTEXT_OPENGL;
-        hw_render.cache_context = false; 
-        hw_render.context_reset = context_reset;
-        hw_render.context_destroy = context_destroy;
-        hw_render.bottom_left_origin = false;
-        hw_render.depth = true;
-
-        oglrender_init        = dummy_retro_gl_init;
-        oglrender_beginOpenGL = dummy_retro_gl_begin;
-        oglrender_endOpenGL   = dummy_retro_gl_end;  
-
-        if (!environ_cb(RETRO_ENVIRONMENT_SET_HW_RENDER, &hw_render))
-        {
-            printf ("Couldn't create rendering context.\n");
-            opengl_mode = false;
-        } 
-    }
-#endif
-
     // Init DeSmuME
     struct NDS_fw_config_data fw_config;
     NDS_FillDefaultFirmwareConfigData(&fw_config);
@@ -1814,6 +1792,28 @@ bool retro_load_game(const struct retro_game_info *game)
    if (!game || colorMode != RETRO_PIXEL_FORMAT_RGB565)
       return false;
 
+#ifdef HAVE_OPENGL
+   if (opengl_mode)
+   {
+       hw_render.context_type = RETRO_HW_CONTEXT_OPENGL;
+       hw_render.cache_context = false; 
+       hw_render.context_reset = context_reset;
+       hw_render.context_destroy = context_destroy;
+       hw_render.bottom_left_origin = false;
+       hw_render.depth = true;
+
+       oglrender_init        = dummy_retro_gl_init;
+       oglrender_beginOpenGL = dummy_retro_gl_begin;
+       oglrender_endOpenGL   = dummy_retro_gl_end;  
+
+       if (!environ_cb(RETRO_ENVIRONMENT_SET_HW_RENDER, &hw_render))
+       {
+           printf ("Couldn't create rendering context.\n");
+           opengl_mode = false;
+       } 
+   }
+#endif
+
 struct retro_input_descriptor desc[] = {
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,   "Left" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,     "Up" },
@@ -1834,7 +1834,7 @@ struct retro_input_descriptor desc[] = {
 
       { 0 },
    };
-
+   
    environ_cb(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, desc);
 
    execute = NDS_LoadROM(game->path);
