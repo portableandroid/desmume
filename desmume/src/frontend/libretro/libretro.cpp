@@ -1870,6 +1870,11 @@ bool retro_load_game(const struct retro_game_info *game)
 #ifdef HAVE_OPENGL
    if (opengl_mode)
    {
+       if (environ_cb(RETRO_ENVIRONMENT_SET_HW_SHARED_CONTEXT, NULL))
+       {
+          log_cb(RETRO_LOG_WARN, "Couldn't set shared context. Some things may break.");
+       }
+
        hw_render.context_type = RETRO_HW_CONTEXT_OPENGL;
        hw_render.cache_context = false; 
        hw_render.context_reset = context_reset;
@@ -1883,7 +1888,7 @@ bool retro_load_game(const struct retro_game_info *game)
 
        if (!environ_cb(RETRO_ENVIRONMENT_SET_HW_RENDER, &hw_render))
        {
-           printf ("Couldn't create rendering context.\n");
+           log_cb(RETRO_LOG_ERROR, "Couldn't create rendering context. Using software rasterizer.");
            opengl_mode = false;
        } 
    }
