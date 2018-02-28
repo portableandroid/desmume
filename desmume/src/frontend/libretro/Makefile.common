@@ -1,15 +1,16 @@
-INCDIR := -I$(CORE_DIR)/libretro-common/include
+LIBRETRO_COMM_DIR := $(CORE_DIR)/libretro-common
+INCDIR := -I$(LIBRETRO_COMM_DIR)/include
 
 SOURCES_CXX := \
 	$(CORE_DIR)/armcpu.cpp \
 	$(CORE_DIR)/arm_instructions.cpp \
 	$(CORE_DIR)/bios.cpp \
 	$(CORE_DIR)/cp15.cpp \
-        $(CORE_DIR)/movie.cpp \
-        $(CORE_DIR)/Database.cpp \
-        $(CORE_DIR)/ROMReader.cpp \
-        $(CORE_DIR)/metaspu/metaspu.cpp \
-        $(CORE_DIR)/debug.cpp \
+	$(CORE_DIR)/movie.cpp \
+	$(CORE_DIR)/Database.cpp \
+	$(CORE_DIR)/ROMReader.cpp \
+	$(CORE_DIR)/metaspu/metaspu.cpp \
+	$(CORE_DIR)/debug.cpp \
 	$(CORE_DIR)/emufile.cpp \
 	$(CORE_DIR)/encrypt.cpp \
 	$(CORE_DIR)/FIFO.cpp \
@@ -98,20 +99,22 @@ SOURCES_C := \
 SOURCES_CXX += $(CORE_DIR)/addons/slot1_retail_mcrom_debug.cpp \
 					$(CORE_DIR)/utils/fsnitro.cpp
 SOURCES_CXX += $(CORE_DIR)/utils/task.cpp
-SOURCES_C   += $(CORE_DIR)/libretro-common/rthreads/rthreads.c
+SOURCES_C   += $(LIBRETRO_COMM_DIR)/rthreads/rthreads.c
 
 SOURCES_C += $(CORE_DIR)/common.c \
 				 $(CORE_DIR)/utils/dlditool.c \
-				 $(CORE_DIR)/libretro-common/memmap/memalign.c \
-				 $(CORE_DIR)/libretro-common/streams/file_stream.c \
-				 $(CORE_DIR)/libretro-common/features/features_cpu.c \
-				 $(CORE_DIR)/libretro-common/compat/compat_strl.c \
-				 $(CORE_DIR)/libretro-common/file/retro_dirent.c \
-				 $(CORE_DIR)/libretro-common/file/retro_stat.c \
-				 $(CORE_DIR)/libretro-common/file/file_path.c \
-				 $(CORE_DIR)/libretro-common/string/stdstring.c \
-				 $(CORE_DIR)/version.c \
-                                 $(CORE_DIR)/libretro-common/encodings/encoding_utf.c
+				 $(LIBRETRO_COMM_DIR)/memmap/memalign.c \
+				 $(LIBRETRO_COMM_DIR)/streams/file_stream.c \
+				 $(LIBRETRO_COMM_DIR)/vfs/vfs_implementation.c \
+				 $(LIBRETRO_COMM_DIR)/features/features_cpu.c \
+				 $(LIBRETRO_COMM_DIR)/compat/compat_strl.c \
+				 $(LIBRETRO_COMM_DIR)/compat/compat_strcasestr.c \
+				 $(LIBRETRO_COMM_DIR)/compat/fopen_utf8.c \
+				 $(LIBRETRO_COMM_DIR)/file/retro_dirent.c \
+				 $(LIBRETRO_COMM_DIR)/file/file_path.c \
+				 $(LIBRETRO_COMM_DIR)/string/stdstring.c \
+				 $(LIBRETRO_COMM_DIR)/encodings/encoding_utf.c \
+				 $(CORE_DIR)/version.c
 
 ifeq ($(DESMUME_JIT_ARM),1)
 SOURCES_CXX += \

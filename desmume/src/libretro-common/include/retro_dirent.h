@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2016 The RetroArch team
+/* Copyright  (C) 2010-2017 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (retro_dirent.h).
@@ -24,18 +24,21 @@
 #define __RETRO_DIRENT_H
 
 #include <retro_common_api.h>
+#include <retro_miscellaneous.h>
 
 #include <boolean.h>
 
 RETRO_BEGIN_DECLS
 
-struct RDIR;
+typedef struct RDIR RDIR;
 
 struct RDIR *retro_opendir(const char *name);
 
 int retro_readdir(struct RDIR *rdir);
 
 bool retro_dirent_error(struct RDIR *rdir);
+
+void retro_dirent_include_hidden(struct RDIR *rdir, bool include_hidden);
 
 const char *retro_dirent_get_name(struct RDIR *rdir);
 

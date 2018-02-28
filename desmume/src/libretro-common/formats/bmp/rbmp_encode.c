@@ -143,9 +143,7 @@ static void dump_content(RFILE *file, const void *frame,
    int j;
    size_t line_size;
    uint8_t *line       = NULL;
-   enum rbmp_source_type format = type & RBMP_SOURCE_TYPE_FORMATMASK;
-   bool yflip = (type & RBMP_SOURCE_TYPE_YFLIPPED);
-   int bytes_per_pixel = (format==RBMP_SOURCE_TYPE_ARGB8888?4:3);
+   int bytes_per_pixel = (type==RBMP_SOURCE_TYPE_ARGB8888?4:3);
    union
    {
       const uint8_t *u8;
@@ -156,47 +154,25 @@ static void dump_content(RFILE *file, const void *frame,
    u.u8      = (const uint8_t*)frame;
    line_size = (width * bytes_per_pixel + 3) & ~3;
 
-   switch (format)
+   switch (type)
    {
       case RBMP_SOURCE_TYPE_BGR24:
          {
             /* BGR24 byte order input matches output. Can directly copy, but... need to make sure we pad it. */
             uint32_t zeros = 0;
             int pad        = (int)(line_size-pitch);
-            if(yflip)
+            for (j = 0; j < height; j++, u.u8 += pitch)
             {
-               u.u8 += pitch * (height - 1);
-               for (j = 0; j < height; j++, u.u8 -= pitch)
-               {
-                  filestream_write(file, u.u8, pitch);
-                  if(pad != 0)
-                     filestream_write(file, &zeros, pad);
-               }
-            }
-            else
-            {
-               for(j = 0; j < height; j++, u.u8 += pitch)
-               {
-                  filestream_write(file, u.u8, pitch);
-                  if(pad != 0)
-                     filestream_write(file, &zeros, pad);
-               }
+               filestream_write(file, u.u8, pitch);
+               if(pad != 0)
+                  filestream_write(file, &zeros, pad);
             }
          }
          break;
       case RBMP_SOURCE_TYPE_ARGB8888:
          /* ARGB8888 byte order input matches output. Can directly copy. */
-         if(yflip)
-         {
-            u.u8 += pitch * (height - 1);
-            for (j = 0; j < height; j++, u.u8 -= pitch)
-               filestream_write(file, u.u8, line_size);
-         }
-         else
-         {
-            for(j = 0; j < height; j++, u.u8 += pitch)
-               filestream_write(file, u.u8, line_size);
-         }
+         for (j = 0; j < height; j++, u.u8 += pitch)
+            filestream_write(file, u.u8, line_size);
          return;
       default:
          break;
@@ -208,44 +184,20 @@ static void dump_content(RFILE *file, const void *frame,
       return;
    *(uint32_t*)(line + line_size - 4) = 0;
 
-   switch (format)
+   switch (type)
    {
       case RBMP_SOURCE_TYPE_XRGB888:
-         if(yflip)
+         for (j = 0; j < height; j++, u.u8 += pitch)
          {
-            u.u8 += pitch * (height - 1);
-            for (j = 0; j < height; j++, u.u8 -= pitch)
-            {
-               dump_line_32_to_24(line, u.u32, width);
-               filestream_write(file, line, line_size);
-            }
-         }
-         else
-         {
-            for(j = 0; j < height; j++, u.u8 += pitch)
-            {
-               dump_line_32_to_24(line, u.u32, width);
-               filestream_write(file, line, line_size);
-            }
+            dump_line_32_to_24(line, u.u32, width);
+            filestream_write(file, line, line_size);
          }
          break;
       case RBMP_SOURCE_TYPE_RGB565:
-         if(yflip)
+         for (j = 0; j < height; j++, u.u8 += pitch)
          {
-            u.u8 += pitch * (height - 1);
-            for (j = 0; j < height; j++, u.u8 -= pitch)
-            {
-               dump_line_565_to_24(line, u.u16, width);
-               filestream_write(file, line, line_size);
-            }
-         }
-         else
-         {
-            for(j = 0; j < height; j++, u.u8 += pitch)
-            {
-               dump_line_565_to_24(line, u.u16, width);
-               filestream_write(file, line, line_size);
-            }
+            dump_line_565_to_24(line, u.u16, width);
+            filestream_write(file, line, line_size);
          }
          break;
       default:
@@ -263,11 +215,13 @@ bool rbmp_save_image(
       unsigned pitch, enum rbmp_source_type type)
 {
    bool ret    = false;
-   RFILE *file = filestream_open(filename, RFILE_MODE_WRITE, -1);
+   RFILE *file = filestream_open(filename,
+         RETRO_VFS_FILE_ACCESS_WRITE,
+         RETRO_VFS_FILE_ACCESS_HINT_NONE);
    if (!file)
       return false;
 
-   ret = write_header_bmp(file, width, height, (type&RBMP_SOURCE_TYPE_FORMATMASK)==RBMP_SOURCE_TYPE_ARGB8888);
+   ret = write_header_bmp(file, width, height, type==RBMP_SOURCE_TYPE_ARGB8888);
 
    if (ret)
       dump_content(file, frame, width, height, pitch, type);

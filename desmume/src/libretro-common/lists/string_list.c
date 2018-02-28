@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2016 The RetroArch team
+/* Copyright  (C) 2010-2017 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (string_list.c).
@@ -25,10 +25,9 @@
 #include <string.h>
 
 #include <lists/string_list.h>
-#include <retro_assert.h>
-#include <retro_miscellaneous.h>
 #include <compat/strl.h>
 #include <compat/posix_string.h>
+#include <string/stdstring.h>
 
 /**
  * string_list_free
@@ -59,10 +58,7 @@ void string_list_free(struct string_list *list)
  **/
 static bool string_list_capacity(struct string_list *list, size_t cap)
 {
-   struct string_list_elem *new_data = NULL;
-   retro_assert(cap > list->size);
-
-   new_data = (struct string_list_elem*)
+   struct string_list_elem *new_data = (struct string_list_elem*)
       realloc(list->elems, cap * sizeof(*new_data));
 
    if (!new_data)
@@ -131,6 +127,40 @@ bool string_list_append(struct string_list *list, const char *elem,
 }
 
 /**
+ * string_list_append_n:
+ * @list             : pointer to string list
+ * @elem             : element to add to the string list
+ * @length           : read at most this many bytes from elem
+ * @attr             : attributes of new element.
+ *
+ * Appends a new element to the string list.
+ *
+ * Returns: true (1) if successful, otherwise false (0).
+ **/
+bool string_list_append_n(struct string_list *list, const char *elem,
+      unsigned length, union string_list_elem_attr attr)
+{
+   char *data_dup = NULL;
+
+   if (list->size >= list->cap &&
+         !string_list_capacity(list, list->cap * 2))
+      return false;
+
+   data_dup = (char*)malloc(length + 1);
+
+   if (!data_dup)
+      return false;
+
+   strlcpy(data_dup, elem, length + 1);
+
+   list->elems[list->size].data = data_dup;
+   list->elems[list->size].attr = attr;
+
+   list->size++;
+   return true;
+}
+
+/**
  * string_list_set:
  * @list             : pointer to string list
  * @idx              : index of element in string list
@@ -142,7 +172,7 @@ void string_list_set(struct string_list *list,
       unsigned idx, const char *str)
 {
    free(list->elems[idx].data);
-   retro_assert(list->elems[idx].data = strdup(str));
+   list->elems[idx].data = strdup(str);
 }
 
 /**
@@ -152,7 +182,7 @@ void string_list_set(struct string_list *list,
  * @list             : pointer to string list.
  * @delim            : delimiter character for @list.
  *
- * A string list will be joined/concatenated as a 
+ * A string list will be joined/concatenated as a
  * string to @buffer, delimited by @delim.
  */
 void string_list_join_concat(char *buffer, size_t size,
@@ -160,7 +190,6 @@ void string_list_join_concat(char *buffer, size_t size,
 {
    size_t i, len = strlen(buffer);
 
-   retro_assert(len < size);
    buffer += len;
    size   -= len;
 
@@ -199,7 +228,8 @@ struct string_list *string_split(const char *str, const char *delim)
    while (tmp)
    {
       union string_list_elem_attr attr;
-      memset(&attr, 0, sizeof(attr));
+
+      attr.i = 0;
 
       if (!string_list_append(list, tmp, attr))
          goto error;
@@ -234,8 +264,8 @@ int string_list_find_elem(const struct string_list *list, const char *elem)
 
    for (i = 0; i < list->size; i++)
    {
-      if (strcasecmp(list->elems[i].data, elem) == 0)
-         return i+1;
+      if (string_is_equal_noncase(list->elems[i].data, elem))
+         return (int)(i + 1);
    }
 
    return false;
@@ -256,18 +286,20 @@ bool string_list_find_elem_prefix(const struct string_list *list,
       const char *prefix, const char *elem)
 {
    size_t i;
-   char prefixed[PATH_MAX_LENGTH] = {0};
+   char prefixed[255];
 
    if (!list)
       return false;
+
+   prefixed[0] = '\0';
 
    strlcpy(prefixed, prefix, sizeof(prefixed));
    strlcat(prefixed, elem,   sizeof(prefixed));
 
    for (i = 0; i < list->size; i++)
    {
-      if (strcasecmp(list->elems[i].data, elem) == 0 ||
-            strcasecmp(list->elems[i].data, prefixed) == 0)
+      if (string_is_equal_noncase(list->elems[i].data, elem) ||
+            string_is_equal_noncase(list->elems[i].data, prefixed))
          return true;
    }
 

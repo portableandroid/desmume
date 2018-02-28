@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2016 The RetroArch team
+/* Copyright  (C) 2010-2017 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (string_list.h).
@@ -110,6 +110,20 @@ bool string_list_append(struct string_list *list, const char *elem,
       union string_list_elem_attr attr);
 
 /**
+ * string_list_append_n:
+ * @list             : pointer to string list
+ * @elem             : element to add to the string list
+ * @length           : read at most this many bytes from elem
+ * @attr             : attributes of new element.
+ *
+ * Appends a new element to the string list.
+ *
+ * Returns: true (1) if successful, otherwise false (0).
+ **/
+bool string_list_append_n(struct string_list *list, const char *elem,
+      unsigned length, union string_list_elem_attr attr);
+
+/**
  * string_list_free
  * @list             : pointer to string list object
  *
@@ -124,7 +138,7 @@ void string_list_free(struct string_list *list);
  * @list             : pointer to string list.
  * @delim            : delimiter character for @list.
  *
- * A string list will be joined/concatenated as a 
+ * A string list will be joined/concatenated as a
  * string to @buffer, delimited by @delim.
  */
 void string_list_join_concat(char *buffer, size_t size,

@@ -27,9 +27,8 @@
 #include "../types.h"
 #include "../debug.h"
 #include "../emufile.h"
-#include "retro_dirent.h"
-#include "retro_stat.h"
-#include "file/file_path.h"
+#include <retro_dirent.h>
+#include <file/file_path.h>
 
 #include "emufat.h"
 #include "vfat.h"

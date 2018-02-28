@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2016 The RetroArch team
+/* Copyright  (C) 2010-2017 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (task_queue.h).
@@ -32,73 +32,16 @@
 
 RETRO_BEGIN_DECLS
 
-enum task_queue_ctl_state
+enum task_type
 {
-   TASK_QUEUE_CTL_NONE = 0,
-
-   /* Deinitializes the task system.
-    * This deinitializes the task system. 
-    * The tasks that are running at
-    * the moment will stay on hold 
-    * until TASK_QUEUE_CTL_INIT is called again. */
-   TASK_QUEUE_CTL_DEINIT,
-
-   /* Initializes the task system.
-    * This initializes the task system 
-    * and chooses an appropriate
-    * implementation according to the settings.
-    *
-    * This must only be called from the main thread. */
-   TASK_QUEUE_CTL_INIT,
-
-   /**
-    * Calls func for every running task 
-    * until it returns true.
-    * Returns a task or NULL if not found.
+   TASK_TYPE_NONE,
+   /* Only one blocking task can exist in the queue at a time.
+    * Attempts to add a new one while another is running is
+    * ignored.
     */
-   TASK_QUEUE_CTL_FIND,
+   TASK_TYPE_BLOCKING
+};
 
-   /**
-    * Calls func for every running task when handler
-    * parameter matches task handler, allowing the
-    * list parameter to be filled with user-defined
-    * data.
-    */
-   TASK_QUEUE_CTL_RETRIEVE,
-
-   /* Blocks until all tasks have finished.
-    * This must only be called from the main thread. */
-   TASK_QUEUE_CTL_WAIT,
-
-   /* Checks for finished tasks
-    * Takes the finished tasks, if any, 
-    * and runs their callbacks.
-    * This must only be called from the main thread. */
-   TASK_QUEUE_CTL_CHECK,
-
-   /* Pushes a task
-    * The task will start as soon as possible. */
-   TASK_QUEUE_CTL_PUSH,
-
-   /* Sends a signal to terminate all the tasks.
-    *
-    * This won't terminate the tasks immediately.
-    * They will finish as soon as possible.
-    *
-    * This must only be called from the main thread. */
-   TASK_QUEUE_CTL_RESET,
-
-   TASK_QUEUE_CTL_SET_THREADED,
-
-   TASK_QUEUE_CTL_UNSET_THREADED,
-
-   TASK_QUEUE_CTL_IS_THREADED,
-   
-   /**
-    * Signals a task to end without waiting for
-    * it to complete. */
-   TASK_QUEUE_CTL_CANCEL
- };
 
 typedef struct retro_task retro_task_t;
 typedef void (*retro_task_callback_t)(void *task_data,
@@ -109,7 +52,12 @@ typedef void (*retro_task_handler_t)(retro_task_t *task);
 typedef bool (*retro_task_finder_t)(retro_task_t *task,
       void *userdata);
 
+typedef void (*retro_task_queue_msg_t)(const char *msg,
+      unsigned prio, unsigned duration, bool flush);
+
 typedef bool (*retro_task_retriever_t)(retro_task_t *task, void *data);
+
+typedef bool (*retro_task_condition_fn_t)(void *data);
 
 typedef struct
 {
@@ -127,11 +75,11 @@ struct retro_task
     * be called immediately after running the main callback */
    retro_task_handler_t cleanup;
 
-   /* set to true by the handler to signal 
+   /* set to true by the handler to signal
     * the task has finished executing. */
    bool finished;
 
-   /* set to true by the task system 
+   /* set to true by the task system
     * to signal the task *must* end. */
    bool cancelled;
 
@@ -147,16 +95,20 @@ struct retro_task
    /* created and destroyed by the code related to the handler */
    void *state;
 
-   /* created by task handler; destroyed by main loop 
+   /* created by task handler; destroyed by main loop
     * (after calling the callback) */
    char *error;
 
-   /* -1 = unmettered, 0-100 progress value */
+   /* -1 = unmetered/indeterminate, 0-100 = current progress percentage */
    int8_t progress;
 
-   /* handler can modify but will be 
+   void (*progress_cb)(retro_task_t*);
+
+   /* handler can modify but will be
     * free()d automatically if non-NULL. */
    char *title;
+
+   enum task_type type;
 
    /* don't touch this. */
    retro_task_t *next;
@@ -182,13 +134,104 @@ typedef struct task_retriever_data
    task_retriever_info_t *list;
 } task_retriever_data_t;
 
-bool task_queue_ctl(enum task_queue_ctl_state state, void *data);
-
 void *task_queue_retriever_info_next(task_retriever_info_t **link);
 
 void task_queue_retriever_info_free(task_retriever_info_t *list);
 
+/**
+ * Signals a task to end without waiting for
+ * it to complete. */
 void task_queue_cancel_task(void *task);
+
+void task_set_finished(retro_task_t *task, bool finished);
+
+void task_set_mute(retro_task_t *task, bool mute);
+
+void task_set_error(retro_task_t *task, char *error);
+
+void task_set_progress(retro_task_t *task, int8_t progress);
+
+void task_set_title(retro_task_t *task, char *title);
+
+void task_set_data(retro_task_t *task, void *data);
+
+void task_set_cancelled(retro_task_t *task, bool cancelled);
+
+void task_free_title(retro_task_t *task);
+
+bool task_get_cancelled(retro_task_t *task);
+
+bool task_get_finished(retro_task_t *task);
+
+bool task_get_mute(retro_task_t *task);
+
+char* task_get_error(retro_task_t *task);
+
+int8_t task_get_progress(retro_task_t *task);
+
+char* task_get_title(retro_task_t *task);
+
+void* task_get_data(retro_task_t *task);
+
+void task_queue_set_threaded(void);
+
+void task_queue_unset_threaded(void);
+
+bool task_queue_is_threaded(void);
+
+/**
+ * Calls func for every running task
+ * until it returns true.
+ * Returns a task or NULL if not found.
+ */
+bool task_queue_find(task_finder_data_t *find_data);
+
+/**
+ * Calls func for every running task when handler
+ * parameter matches task handler, allowing the
+ * list parameter to be filled with user-defined
+ * data.
+ */
+void task_queue_retrieve(task_retriever_data_t *data);
+
+ /* Checks for finished tasks
+  * Takes the finished tasks, if any,
+  * and runs their callbacks.
+  * This must only be called from the main thread. */
+void task_queue_check(void);
+
+/* Pushes a task
+ * The task will start as soon as possible. */
+void task_queue_push(retro_task_t *task);
+
+/* Blocks until all tasks have finished
+ * will return early if cond is not NULL
+ * and cond(data) returns false.
+ * This must only be called from the main thread. */
+void task_queue_wait(retro_task_condition_fn_t cond, void* data);
+
+
+/* Sends a signal to terminate all the tasks.
+ *
+ * This won't terminate the tasks immediately.
+ * They will finish as soon as possible.
+ *
+ * This must only be called from the main thread. */
+void task_queue_reset(void);
+
+/* Deinitializes the task system.
+ * This deinitializes the task system.
+ * The tasks that are running at
+ * the moment will stay on hold */
+void task_queue_deinit(void);
+
+/* Initializes the task system.
+ * This initializes the task system
+ * and chooses an appropriate
+ * implementation according to the settings.
+ *
+ * This must only be called from the main thread. */
+void task_queue_init(bool threaded, retro_task_queue_msg_t msg_push);
 
 RETRO_END_DECLS
 

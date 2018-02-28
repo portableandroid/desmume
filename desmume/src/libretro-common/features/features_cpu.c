@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2016 The RetroArch team
+/* Copyright  (C) 2010-2017 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (features_cpu.c).
@@ -33,6 +33,7 @@
 #include <streams/file_stream.h>
 #include <libretro.h>
 #include <features/features_cpu.h>
+#include <retro_timers.h>
 
 #if defined(_WIN32) && !defined(_XBOX)
 #include <windows.h>
@@ -44,7 +45,7 @@
 #endif
 #elif defined(_XBOX360)
 #include <PPCIntrinsics.h>
-#elif defined(_POSIX_MONOTONIC_CLOCK) || defined(ANDROID) || defined(__QNX__)
+#elif defined(_POSIX_MONOTONIC_CLOCK) || defined(ANDROID) || defined(__QNX__) || defined(DJGPP)
 /* POSIX_MONOTONIC_CLOCK is not being defined in Android headers despite support being present. */
 #include <time.h>
 #endif
@@ -54,6 +55,7 @@
 #endif
 
 #if defined(PSP)
+#include <pspkernel.h>
 #include <sys/time.h>
 #include <psprtc.h>
 #endif
@@ -74,13 +76,18 @@
 #endif
 
 #ifdef WIIU
-#include <coreinit/time.h>
-#include "wiiu/system/wiiu.h"
+#include <wiiu/os/time.h>
+#endif
+
+#ifdef SWITCH
+#include <libtransistor/types.h>
+#include <libtransistor/svc.h>
 #endif
 
 #if defined(_3DS)
 #include <3ds/svc.h>
 #include <3ds/os.h>
+#include <3ds/services/cfgu.h>
 #endif
 
 /* iOS/OSX specific. Lacks clock_gettime(), so implement it. */
@@ -108,7 +115,7 @@ static int ra_clock_gettime(int clk_ik, struct timespec *t)
 }
 #endif
 
-#if defined(__MACH__) && (__MAC_OS_X_VERSION_MAX_ALLOWED < 101200) && (__IPHONE_OS_VERSION_MAX_ALLOWED < 100000)
+#if defined(__MACH__) && __IPHONE_OS_VERSION_MIN_REQUIRED < 100000
 #else
 #define ra_clock_gettime clock_gettime
 #endif
@@ -136,7 +143,11 @@ retro_perf_tick_t cpu_features_get_perf_counter(void)
    retro_perf_tick_t time_ticks = 0;
 #if defined(_WIN32)
    long tv_sec, tv_usec;
+#if defined(_MSC_VER) && _MSC_VER <= 1200
+   static const unsigned __int64 epoch = 11644473600000000;
+#else
    static const unsigned __int64 epoch = 11644473600000000ULL;
+#endif
    FILETIME file_time;
    SYSTEMTIME system_time;
    ULARGE_INTEGER ularge;
@@ -167,7 +178,7 @@ retro_perf_tick_t cpu_features_get_perf_counter(void)
    time_ticks = __mftb();
 #elif defined(GEKKO)
    time_ticks = gettime();
-#elif defined(PSP) 
+#elif defined(PSP)
    sceRtcGetCurrentTick((uint64_t*)&time_ticks);
 #elif defined(VITA)
    sceRtcGetCurrentTick((SceRtcTick*)&time_ticks);
@@ -215,7 +226,7 @@ retro_time_t cpu_features_get_time_usec(void)
    return tv.tv_sec * INT64_C(1000000) + (tv.tv_nsec + 500) / 1000;
 #elif defined(EMSCRIPTEN)
    return emscripten_get_now() * 1000;
-#elif defined(__mips__)
+#elif defined(__mips__) || defined(DJGPP)
    struct timeval tv;
    gettimeofday(&tv,NULL);
    return (1000000 * tv.tv_sec + tv.tv_usec);
@@ -225,12 +236,14 @@ retro_time_t cpu_features_get_time_usec(void)
    return sceKernelGetProcessTimeWide();
 #elif defined(WIIU)
    return ticks_to_us(OSGetSystemTime());
+#elif defined(SWITCH)
+   return (svcGetSystemTick() * 10) / 192;
 #else
 #error "Your platform does not have a timer function implemented in cpu_features_get_time_usec(). Cannot continue."
 #endif
 }
 
-#if defined(__x86_64__) || defined(__i386__) || defined(__i486__) || defined(__i686__)
+#if defined(__x86_64__) || defined(__i386__) || defined(__i486__) || defined(__i686__) || (defined(_M_X64) && _MSC_VER > 1310) || (defined(_M_IX86)  && _MSC_VER > 1310)
 #define CPU_X86
 #endif
 
@@ -315,7 +328,9 @@ static unsigned char check_arm_cpu_feature(const char* feature)
 {
    char line[1024];
    unsigned char status = 0;
-   RFILE *fp = filestream_open("/proc/cpuinfo", RFILE_MODE_READ_TEXT, -1);
+   RFILE *fp = filestream_open("/proc/cpuinfo",
+         RETRO_VFS_FILE_ACCESS_READ,
+         RETRO_VFS_FILE_ACCESS_HINT_NONE);
 
    if (!fp)
       return 0;
@@ -467,6 +482,26 @@ unsigned cpu_features_get_core_amount(void)
 #elif defined(VITA)
    return 4;
 #elif defined(_3DS)
+   u8 device_model = 0xFF;
+   CFGU_GetSystemModel(&device_model);/*(0 = O3DS, 1 = O3DSXL, 2 = N3DS, 3 = 2DS, 4 = N3DSXL, 5 = N2DSXL)*/
+   switch (device_model)
+   {
+		case 0:
+		case 1:
+		case 3:
+			/*Old 3/2DS*/
+			return 2;
+	   
+		case 2:
+		case 4:
+		case 5:
+			/*New 3/2DS*/
+			return 4;
+	   
+		default:
+			/*Unknown Device Or Check Failed*/
+			break;
+   }
    return 1;
 #elif defined(WIIU)
    return 3;
@@ -475,7 +510,7 @@ unsigned cpu_features_get_core_amount(void)
    long ret = sysconf(_SC_NPROCESSORS_ONLN);
    if (ret <= 0)
       return (unsigned)1;
-   return ret;
+   return (unsigned)ret;
 #elif defined(BSD) || defined(__APPLE__)
    /* BSD */
    /* Copypasta from stackoverflow, dunno if it works. */
@@ -614,6 +649,10 @@ uint64_t cpu_features_get(void)
    if (sysctlbyname("hw.optional.neon", NULL, &len, NULL, 0) == 0)
       cpu |= RETRO_SIMD_NEON;
 
+#elif defined(_XBOX1)
+   cpu |= RETRO_SIMD_MMX;
+   cpu |= RETRO_SIMD_SSE;
+   cpu |= RETRO_SIMD_MMXEXT;
 #elif defined(CPU_X86)
    (void)avx_flags;
 

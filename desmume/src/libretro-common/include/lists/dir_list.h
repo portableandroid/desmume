@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2016 The RetroArch team
+/* Copyright  (C) 2010-2017 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (dir_list.h).
@@ -34,7 +34,9 @@ RETRO_BEGIN_DECLS
  * @dir                : directory path.
  * @ext                : allowed extensions of file directory entries to include.
  * @include_dirs       : include directories as part of the finished directory listing?
+ * @include_hidden     : include hidden files and directories as part of the finished directory listing?
  * @include_compressed : include compressed files, even when not part of ext.
+ * @recursive          : list directory contents recursively
  *
  * Create a directory listing.
  *
@@ -42,7 +44,7 @@ RETRO_BEGIN_DECLS
  * NULL in case of error. Has to be freed manually.
  **/
 struct string_list *dir_list_new(const char *dir, const char *ext,
-      bool include_dirs, bool include_compressed);
+      bool include_dirs, bool include_hidden, bool include_compressed, bool recursive);
 
 /**
  * dir_list_sort:
