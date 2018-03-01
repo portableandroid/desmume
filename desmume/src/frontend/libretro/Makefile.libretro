@@ -1,5 +1,11 @@
 DEBUG=0
 
+ifneq ($(SANITIZER),)
+   CFLAGS   := -fsanitize=$(SANITIZER) $(CFLAGS)
+   CXXFLAGS := -fsanitize=$(SANITIZER) $(CXXFLAGS)
+   LDFLAGS  := -fsanitize=$(SANITIZER) $(LDFLAGS)
+endif
+
 ifeq ($(platform),)
    platform = unix
    ifeq ($(shell uname -a),)
@@ -320,8 +326,10 @@ endif
 include Makefile.common
 
 ifeq ($(DEBUG), 1)
+   CFLAGS += -O0 -g
    CXXFLAGS += -O0 -g
 else
+   CFLAGS += -O2 -DNDEBUG
    CXXFLAGS += -O2 -DNDEBUG
 endif
 
