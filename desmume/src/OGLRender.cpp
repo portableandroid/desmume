@@ -1473,6 +1473,9 @@ FragmentColor* OpenGLRenderer::GetFramebuffer()
 	return (this->willFlipAndConvertFramebufferOnGPU && this->isPBOSupported) ? this->_mappedFramebuffer : GPU->GetEngineMain()->Get3DFramebufferMain();
 }
 
+#if defined(__LIBRETRO__)
+extern int multisample_level;
+#endif
 
 GLsizei OpenGLRenderer::GetLimitedMultisampleSize() const
 {
@@ -1498,7 +1501,11 @@ GLsizei OpenGLRenderer::GetLimitedMultisampleSize() const
 	{
 		maxMultisamples = OGLMaxMultisamples_Tier4;
 	}
-	
+
+#if defined(__LIBRETRO__)
+   maxMultisamples = multisample_level;
+#endif
+
 	if (deviceMultisamples > maxMultisamples)
 	{
 		deviceMultisamples = maxMultisamples;
