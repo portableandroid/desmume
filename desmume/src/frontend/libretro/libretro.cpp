@@ -77,6 +77,7 @@ static int hybrid_layout_scale = 1;
 static bool hybrid_layout_showbothscreens = true;
 static bool hybrid_cursor_always_smallscreen = true;
 static uint16_t pointer_colour = 0xFFFF;
+int multisample_level;
 
 static uint16_t *screen_buf;
 
@@ -836,10 +837,13 @@ static void check_variables(bool first_boot)
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
-      if (!strcmp(var.value, "enabled"))
-         CommonSettings.GFX3D_Renderer_Multisample = true;
-      else if (!strcmp(var.value, "disabled"))
+      if (!strcmp(var.value, "disabled"))
          CommonSettings.GFX3D_Renderer_Multisample = false;
+      else
+      {
+         CommonSettings.GFX3D_Renderer_Multisample = true;
+         multisample_level = atoi(var.value);
+      }
    }
    else
       CommonSettings.GFX3D_Renderer_Multisample = false;
@@ -1123,7 +1127,7 @@ void retro_set_environment(retro_environment_t cb)
       { "desmume_internal_resolution", "Internal resolution (restart); 256x192|512x384|768x576|1024x768|1280x960|1536x1152|1792x1344|2048x1536|2304x1728|2560x1920" },
 #ifdef HAVE_OPENGL
       { "desmume_opengl_mode", "OpenGL Rasterizer (restart); disabled|enabled" },
-      { "desmume_gfx_multisampling", "GL Multisampling; disabled|enabled" },
+      { "desmume_gfx_multisampling", "GL Multisampling (restart); disabled|2|4|8|16|32" },
       { "desmume_gfx_texture_smoothing", "GL Enable texture smoothing; disabled|enabled" },
 #endif
       { "desmume_gfx_texture_scaling", "Texture scaling (xBrz); 1|2|4" },
