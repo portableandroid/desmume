@@ -123,8 +123,7 @@ SOURCES_CXX += \
 endif
 
 ifeq ($(DEBUG),1)
-SOURCES_CXX += $(CORE_DIR)/debug.cpp \
-					$(CORE_DIR)/Disassembler.cpp
+SOURCES_CXX += $(CORE_DIR)/frontend/modules/Disassembler.cpp
 endif
 
 ifeq ($(DESMUME_JIT),1)
