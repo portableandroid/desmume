@@ -2099,7 +2099,7 @@ bool retro_load_game(const struct retro_game_info *game)
 #ifdef HAVE_OPENGL
    if (opengl_mode)
    {
-       if (environ_cb(RETRO_ENVIRONMENT_SET_HW_SHARED_CONTEXT, NULL))
+       if (!environ_cb(RETRO_ENVIRONMENT_SET_HW_SHARED_CONTEXT, NULL))
        {
           log_cb(RETRO_LOG_WARN, "Couldn't set shared context. Some things may break.\n");
        }
