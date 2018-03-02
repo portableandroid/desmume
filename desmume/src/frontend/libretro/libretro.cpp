@@ -1796,9 +1796,6 @@ void retro_run (void)
          input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2) //Lid
          );
 
-   // BUTTONS
-   NDS_beginProcessingInput();
-
    if (!microphone_force_enable)
    {
       if(input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3))
@@ -1809,6 +1806,8 @@ void retro_run (void)
    else
       NDS_setMic(true);
 
+   // BUTTONS
+   NDS_beginProcessingInput();
 
    if(input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3) && quick_switch_enable && delay_timer == 0)
    {
