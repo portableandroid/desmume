@@ -2145,10 +2145,13 @@ struct retro_input_descriptor desc[] = {
 
    environ_cb(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, desc);
 
-   execute = NDS_LoadROM(game->path);
+   if (NDS_LoadROM(game->path) < 0)
+   {
+       execute = false;
+       return false;
+   }
 
-   if (execute == -1)
-      return false;
+   execute = true;
 
    screen_buf = (uint16_t*)malloc((hybrid_layout_scale * (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH + NDS_MAX_SCREEN_GAP * scale)) * (hybrid_layout_scale * GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT) * 2 * bpp);
 
