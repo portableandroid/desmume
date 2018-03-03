@@ -30,6 +30,7 @@ distribution.
 #endif
 
 #include "tinyxml.h"
+#include "compat/fopen_utf8.h"
 
 FILE* TiXmlFOpen( const char* filename, const char* mode );
 
@@ -45,7 +46,7 @@ FILE* TiXmlFOpen( const char* filename, const char* mode )
 			return fp;
 		return 0;
 	#else
-		return fopen( filename, mode );
+		return fopen_utf8( filename, mode );
 	#endif
 }
 

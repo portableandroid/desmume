@@ -31,6 +31,7 @@
 #include "../path.h"
 #include "../NDSSystem.h"
 #include "../utils/fsnitro.h"
+#include "compat/fopen_utf8.h"
 
 class Slot1_Retail_DEBUG : public ISlot1Interface, public ISlot1Comp_Protocol_Client
 {
@@ -135,7 +136,7 @@ public:
 						}
 						tmp = pathData + tmp;
 
-						fpROM = fopen(tmp.c_str(), "rb");
+						fpROM = fopen_utf8(tmp.c_str(), "rb");
 						if (fpROM)
 						{
 							bFromFile = true;

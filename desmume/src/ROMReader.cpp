@@ -25,8 +25,10 @@
 #include <zzip/zzip.h>
 #endif
 
+#include "compat/fopen_utf8.h"
+
 #if defined(_WIN32) && defined(_MSVC_VER) 
-#define stat(...) _stat(__VA_ARGS__)
+#define stat(...) stat_utf8(__VA_ARGS__)
 #define S_IFMT _S_IFMT
 #define S_IFREG _S_IFREG
 #endif
@@ -77,16 +79,16 @@ struct STDROMReaderData
 
 void* STDROMReaderInit(const char* filename)
 {
-#ifndef _MSC_VER
+#ifndef _WIN32
 	struct stat sb;
-	if (stat(filename, &sb) == -1)
+	if (stat_utf8(filename, &sb) == -1)
 		return 0;
 
  	if ((sb.st_mode & S_IFMT) != S_IFREG)
 		return 0;
 #endif
 
-	FILE* inf = fopen(filename, "rb");
+	FILE* inf = fopen_utf8(filename, "rb");
 	if(!inf) return NULL;
 
 	STDROMReaderData* ret = new STDROMReaderData();

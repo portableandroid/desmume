@@ -43,6 +43,8 @@ THE SOFTWARE.
 #include <unistd.h>
 #endif
 
+#include "compat/fopen_utf8.h"
+
 class EMUFILE_MEMORY;
 
 class EMUFILE {
@@ -299,7 +301,7 @@ private:
 		mPositionCacheEnabled = false;
 		mCondition = eCondition_Clean;
 		mFilePosition = 0;
-		fp = fopen(fname,mode);
+		fp = fopen_utf8(fname,mode);
 		if(!fp)
 			failbit = true;
 		this->fname = fname;

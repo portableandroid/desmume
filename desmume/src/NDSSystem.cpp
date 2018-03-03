@@ -57,6 +57,7 @@
 #include "SPU.h"
 #include "wifi.h"
 #include "Database.h"
+#include "compat/fopen_utf8.h"
 
 #ifdef GDB_STUB
 #include "gdbstub.h"
@@ -2158,7 +2159,7 @@ static void PrepareBiosARM7()
 	if(CommonSettings.UseExtBIOS == true)
 	{
 		//read arm7 bios from inputfile and flag it if it succeeds
-		FILE *arm7inf = fopen(CommonSettings.ARM7BIOS,"rb");
+		FILE *arm7inf = fopen_utf8(CommonSettings.ARM7BIOS,"rb");
 		if (arm7inf) 
 		{
 			if (fread(MMU.ARM7_BIOS,1,16384,arm7inf) == 16384)
@@ -2216,7 +2217,7 @@ static void PrepareBiosARM9()
 	if(CommonSettings.UseExtBIOS == true)
 	{
 		//read arm9 bios from inputfile and flag it if it succeeds
-		FILE* arm9inf = fopen(CommonSettings.ARM9BIOS,"rb");
+		FILE* arm9inf = fopen_utf8(CommonSettings.ARM9BIOS,"rb");
 		if (arm9inf) 
 		{
 			if (fread(MMU.ARM9_BIOS,1,4096,arm9inf) == 4096) 
@@ -2354,7 +2355,7 @@ static void PrepareLogfiles()
 		fclose(fp_dis7);
 		fp_dis7 = NULL;
 	}
-	fp_dis7 = fopen("D:\\desmume_dis7.asm", "w");
+	fp_dis7 = fopen_utf8("D:\\desmume_dis7.asm", "w");
 #endif
 
 #ifdef LOG_ARM9
@@ -2363,7 +2364,7 @@ static void PrepareLogfiles()
 		fclose(fp_dis9);
 		fp_dis9 = NULL;
 	}
-	fp_dis9 = fopen("D:\\desmume_dis9.asm", "w");
+	fp_dis9 = fopen_utf8("D:\\desmume_dis9.asm", "w");
 #endif
 }
 

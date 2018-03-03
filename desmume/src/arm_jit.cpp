@@ -18,6 +18,7 @@
 */
 
 #include "types.h"
+#include "compat/fopen_utf8.h"
 
 #ifdef HAVE_JIT
 #if !defined(HOST_32) && !defined(HOST_64)
@@ -4381,7 +4382,7 @@ void arm_jit_close()
 
 		char buf[MAX_PATH] = {0};
 		sprintf(buf, "desmume_jit%c_counter.profiler", proc==0?'9':'7');
-		FILE *fp = fopen(buf, "w");
+		FILE *fp = fopen_utf8(buf, "w");
 		if (fp)
 		{
 			if (!gameInfo.isHomebrew())
@@ -4417,7 +4418,7 @@ void arm_jit_close()
 
 #if (PROFILER_JIT_LEVEL > 1)
 		sprintf(buf, "desmume_jit%c_entry.profiler", proc==0?'9':'7');
-		fp = fopen(buf, "w");
+		fp = fopen_utf8(buf, "w");
 		if (fp)
 		{
 			u32 count = 0;

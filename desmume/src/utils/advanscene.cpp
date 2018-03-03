@@ -25,6 +25,7 @@
 #include "../common.h"
 #include "../mc.h"
 #include "../emufile.h"
+#include "compat/fopen_utf8.h"
 
 ADVANsCEne advsc;
 
@@ -36,7 +37,7 @@ ADVANsCEne advsc;
 u8 ADVANsCEne::checkDB(const char *ROMserial, u32 crc)
 {
 	loaded = false;
-	FILE *fp = fopen(database_path.c_str(), "rb");
+	FILE *fp = fopen_utf8(database_path.c_str(), "rb");
 	if (fp)
 	{
 		char buf[64];

@@ -11,6 +11,7 @@
 #include "../core/lock.h"
 #include "../core/memorymanager.h"
 #include "../core/virtualmemory.h"
+#include "compat/fopen_utf8.h"
 
 // [Api-Begin]
 #include "../core/apibegin.h"
@@ -1162,7 +1163,7 @@ GraphVizContext::~GraphVizContext()
 
 bool GraphVizContext::openFile(const char* fileName)
 {
-  file = fopen(fileName, "w");
+  file = fopen_utf8(fileName, "w");
   return file != NULL;
 }
 

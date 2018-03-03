@@ -61,6 +61,8 @@
 #include "frontend/windows/main.h"
 #endif
 
+#include "compat/fopen_utf8.h"
+
 int lastSaveState = 0;		//Keeps track of last savestate used for quick save/load functions
 
 //void*v is actually a void** which will be indirected before reading
@@ -678,7 +680,7 @@ void scan_savestates()
 	  
 	  if (strlen(filename) + strlen(".dst") + strlen("-2147483648") /* = biggest string for i */ >MAX_PATH) return ;
       sprintf(filename+strlen(filename), ".ds%d", i);
-      if( stat(filename,&sbuf) == -1 ) continue;
+      if( stat_utf8(filename,&sbuf) == -1 ) continue;
       savestates[i].exists = TRUE;
       strncpy(savestates[i].date, format_time(sbuf.st_mtime),40);
 	  savestates[i].date[40-1] = '\0';
@@ -713,7 +715,7 @@ void savestate_slot(int num)
 
    if (num >= 0 && num < NB_STATES)
    {
-	   if (stat(filename,&sbuf) != -1)
+          if (stat_utf8(filename,&sbuf) != -1)
 	   {
 		   savestates[num].exists = TRUE;
 		   strncpy(savestates[num].date, format_time(sbuf.st_mtime),40);
@@ -1056,7 +1058,7 @@ bool savestate_save (const char *file_name)
 	if (!savestate_save(ms, 0))
 #endif
 		return false;
-	FILE* file = fopen(file_name,"wb");
+	FILE* file = fopen_utf8(file_name,"wb");
 	if(file)
 	{
 		elems_written = fwrite(ms.buf(),1,ms.size(),file);

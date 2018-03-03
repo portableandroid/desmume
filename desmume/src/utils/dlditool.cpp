@@ -70,6 +70,7 @@ typedef int int32_t;
 #endif
 
 #include <sys/stat.h>
+#include "compat/fopen_utf8.h"
 
 namespace DLDI
 {
@@ -220,7 +221,7 @@ FILE *openDLDIFile(const char *argv0, char *dldiFileName ) {
 
 	printf ("Trying \"%s\"\n", dldiFileName);
 	// try opening from current directory
-	dldiFile = fopen(dldiFileName,"rb");
+	dldiFile = fopen_utf8(dldiFileName,"rb");
 
 	if ( NULL != dldiFile ) return dldiFile;
 
@@ -241,7 +242,7 @@ FILE *openDLDIFile(const char *argv0, char *dldiFileName ) {
 		strcat ( appPath, dldiFileName );
 		
 		printf ("Trying \"%s\"\n", appPath);
-		dldiFile = fopen(appPath,"rb");
+		dldiFile = fopen_utf8(appPath,"rb");
 
 		if ( NULL != dldiFile ) return dldiFile;
 		 
@@ -289,7 +290,7 @@ FILE *openDLDIFile(const char *argv0, char *dldiFileName ) {
 			strcpy(appPathName,appPath);
 			strcat(appPathName,appName);		// add application name
 
-			if ( stat(appPathName,&buf) == 0 )	// if it exists we found the path
+			if ( stat_utf8(appPathName,&buf) == 0 )	// if it exists we found the path
 				break;
 			
 			thisPATH = nextPATH;
@@ -302,7 +303,7 @@ FILE *openDLDIFile(const char *argv0, char *dldiFileName ) {
 	strcat(appPath,dldiFileName);	// add dldi filename to path
 	printf ("Trying \"%s\"\n", appPath);
 
-	return fopen(appPath,"rb");		// no more places to check, just return this handle
+	return fopen_utf8(appPath,"rb");		// no more places to check, just return this handle
 }
 
 //int main(int argc, char* argv[])
@@ -365,7 +366,7 @@ FILE *openDLDIFile(const char *argv0, char *dldiFileName ) {
 //			return EXIT_FAILURE;
 //	}
 //
-//	if (!(appFile = fopen (appFileName, "rb+"))) {
+//	if (!(appFile = fopen_utf8 (appFileName, "rb+"))) {
 //		printf ("Cannot open \"%s\" - %s\n", appFileName, strerror(errno));
 //		return EXIT_FAILURE;
 //	}

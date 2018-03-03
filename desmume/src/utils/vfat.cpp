@@ -33,7 +33,7 @@
 #include "emufat.h"
 #include "vfat.h"
 #include "libfat/libfat_public_api.h"
-
+#include "compat/fopen_utf8.h"
 
 enum EListCallbackArg {
 	EListCallbackArg_Item, EListCallbackArg_Pop
@@ -140,7 +140,7 @@ static void DirectoryListCallback(RDIR* rdir, EListCallbackArg arg)
 
 		if(callbackType == eCallbackType_Build)
 		{
-			FILE* inf = fopen(path.c_str(),"rb");
+			FILE* inf = fopen_utf8(path.c_str(),"rb");
 			if(inf)
 			{
 				fseek(inf,0,SEEK_END);

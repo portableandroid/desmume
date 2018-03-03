@@ -57,6 +57,8 @@
 #include "saves.h"
 #include "emufile.h"
 
+#include "compat/fopen_utf8.h"
+
 using namespace std;
 
 
@@ -643,7 +645,7 @@ DEFINE_LUA_FUNCTION(emu_persistglobalvariables, "variabletable")
 	LuaSaveData exitData;
 	{
 		*pathTypeChrPtr = 'e';
-		FILE* persistFile = fopen(path, "rb");
+		FILE* persistFile = fopen_utf8(path, "rb");
 		if(persistFile)
 		{
 			exitData.ImportRecords(persistFile);
@@ -655,7 +657,7 @@ DEFINE_LUA_FUNCTION(emu_persistglobalvariables, "variabletable")
 	LuaSaveData defaultData;
 	{
 		*pathTypeChrPtr = 'd';
-		FILE* defaultsFile = fopen(path, "rb");
+		FILE* defaultsFile = fopen_utf8(path, "rb");
 		if(defaultsFile)
 		{
 			defaultData.ImportRecords(defaultsFile);
@@ -2197,7 +2199,7 @@ DEFINE_LUA_FUNCTION(state_loadscriptdata, "location")
 			//	strncpy(luaSaveFilename, Name, 512);
 			//	luaSaveFilename[512-(1+7/*strlen(".luasav")*/)] = '\0';
 			//	strcat(luaSaveFilename, ".luasav");
-			//	FILE* luaSaveFile = fopen(luaSaveFilename, "rb");
+			//	FILE* luaSaveFile = fopen_utf8(luaSaveFilename, "rb");
 			//	if(luaSaveFile)
 			//	{
 			//		saveData.ImportRecords(luaSaveFile);
@@ -5410,7 +5412,7 @@ void CallExitFunction(int uid)
 			*pathTypeChrPtr = 'd';
 			if(info.newDefaultData.recordList)
 			{
-				FILE* defaultsFile = fopen(path, "wb");
+				FILE* defaultsFile = fopen_utf8(path, "wb");
 				if(defaultsFile)
 				{
 					info.newDefaultData.ExportRecords(defaultsFile);
@@ -5422,7 +5424,7 @@ void CallExitFunction(int uid)
 			*pathTypeChrPtr = 'e';
 			if(newExitData.recordList)
 			{
-				FILE* persistFile = fopen(path, "wb");
+				FILE* persistFile = fopen_utf8(path, "wb");
 				if(persistFile)
 				{
 					newExitData.ExportRecords(persistFile);

@@ -23,6 +23,7 @@
 #include "fsnitro.h"
 #include "file/file_path.h"
 #include "NDSSystem.h"
+#include "compat/fopen_utf8.h"
 
 FS_NITRO::FS_NITRO()
 {
@@ -297,7 +298,7 @@ bool FS_NITRO::rebuildFAT(u32 addr, u32 size, std::string pathData)
 		std::string path = pathData + getFullPathByFileID(i);
 		//printf("%04Xh - %s (%d)\n", i, path.c_str(), fat[i].size);
 		fat[i].file = false;
-		FILE *fp = fopen(path.c_str(), "rb");
+		FILE *fp = fopen_utf8(path.c_str(), "rb");
 		if (!fp) continue;
 		fseek(fp, 0, SEEK_END);
 		u32 size = ftell(fp);
@@ -481,7 +482,7 @@ bool FS_NITRO::extract(u16 id, std::string to)
 {
 	printf("Extract to %s\n", to.c_str());
 
-	FILE *fp = fopen(to.c_str(), "wb");
+	FILE *fp = fopen_utf8(to.c_str(), "wb");
 	if (fp)
 	{
 		u32 remain = fat[id].size;
