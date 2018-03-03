@@ -15,6 +15,7 @@
 	along with the this software.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdlib.h>
 #include "../types.h"
 #include "filter.h"
 
