@@ -34,4 +34,40 @@ FILE* fopen_utf8(const char * filename, const char * mode)
    return ret;
 #endif
 }
+
+#undef stat
+int stat_utf8(const char * filename, struct stat *buffer)
+{
+    wchar_t * filename_w = utf8_to_utf16_string_alloc(filename);
+    struct _stat params;
+
+    int ret = _wstat(filename_w, &params);
+    free(filename_w);
+
+    if (buffer && !ret)
+    {
+        buffer->st_gid   = params.st_gid;
+        buffer->st_atime = params.st_atime;
+        buffer->st_ctime = params.st_ctime;
+        buffer->st_dev   = params.st_dev;
+        buffer->st_ino   = params.st_ino;
+        buffer->st_mode  = params.st_mode;
+        buffer->st_mtime = params.st_mtime;
+        buffer->st_nlink = params.st_nlink;
+        buffer->st_rdev  = params.st_rdev;
+        buffer->st_size  = params.st_size;
+        buffer->st_uid   = params.st_uid;
+    }
+
+    return ret;
+}
+
+#undef access
+int access_utf8(const char * filename, int mode)
+{
+    wchar_t * filename_w = utf8_to_utf16_string_alloc(filename);
+    int ret = _waccess(filename_w, mode);
+    free(filename_w);
+    return ret;
+}
 #endif
