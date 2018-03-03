@@ -1503,7 +1503,7 @@ GLsizei OpenGLRenderer::GetLimitedMultisampleSize() const
 	}
 
 #if defined(__LIBRETRO__)
-   maxMultisamples = multisample_level;
+	maxMultisamples = multisample_level;
 #endif
 
 	if (deviceMultisamples > maxMultisamples)
