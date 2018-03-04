@@ -1435,6 +1435,20 @@ void retro_init (void)
     //addonsChangePak(NDS_ADDON_NONE);
     NDS_Init();
     SPU_ChangeSoundCore(0, 735 * 2);
+
+    const char *nickname;
+    if (environ_cb(RETRO_ENVIRONMENT_GET_USERNAME, &nickname))
+    {
+        int len = strlen(nickname);
+
+        if (len > MAX_FW_NICKNAME_LENGTH)
+            len = MAX_FW_NICKNAME_LENGTH;
+
+        for (int i = 0; i < len; i++)
+            fw_config.nickname[i] = nickname[i];
+        fw_config.nickname_len = len;
+    }
+
     NDS_CreateDummyFirmware(&fw_config);
 
     NDS_3D_ChangeCore(GPU3D_SOFTRASTERIZER);
