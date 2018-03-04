@@ -1437,7 +1437,7 @@ void retro_init (void)
     SPU_ChangeSoundCore(0, 735 * 2);
 
     const char *nickname;
-    if (environ_cb(RETRO_ENVIRONMENT_GET_USERNAME, &nickname))
+    if (environ_cb(RETRO_ENVIRONMENT_GET_USERNAME, &nickname) && nickname)
     {
        int len = strlen(nickname);
 
