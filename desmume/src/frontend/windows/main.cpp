@@ -548,7 +548,7 @@ public:
 			return;
 		}
 
-		DRV_AviVideoUpdate();
+		DRV_AviVideoUpdate(latestDisplayInfo);
 	}
 };
 
@@ -597,39 +597,46 @@ static void InputTimer()
 		initialized = true;
 	}
 
-	int nloops = JOYSTICK?16:1;
-	for(int j=0;j<nloops;j++)
-	{
-	for (int z = 0; z < 256; z++) {
-		int i = z | (JOYSTICK?0x8000:0);
-		i |= (j<<8);
-		int n = i&0xFFF;
-		bool active = !S9xGetState(i);
+	const int nloops = (JOYSTICK) ? 16 : 1;
+	const HWND mainWindow = MainWindow->getHWnd();
+	const bool willAcceptInput = ( allowBackgroundInput || (mainWindow == GetForegroundWindow()) );
 
-		if (active) {
-			bool keyRepeat = (currentTime - joyState[n].firstPressedTime) >= (DWORD)KeyInDelayMSec;
-			if (!joyState[n].wasPressed || keyRepeat) {
-				if (!joyState[n].wasPressed)
-					joyState[n].firstPressedTime = currentTime;
-				joyState[n].lastPressedTime = currentTime;
-				if (keyRepeat && joyState[n].repeatCount < 0xffff)
-					joyState[n].repeatCount++;
-				int mods = GetInitialModifiers(i);
-				WPARAM wparam = i | (mods << 16) | (j<<8);
-				PostMessage(MainWindow->getHWnd(), WM_CUSTKEYDOWN, wparam,(LPARAM)(joyState[n].repeatCount | (joyState[n].wasPressed ? 0x40000000 : 0)));
-			}
-		}
-		else {
-			joyState[n].repeatCount = 1;
-			if (joyState[n].wasPressed)
+	for (int j = 0; j < nloops; j++)
+	{
+		for (int z = 0; z < 256; z++)
+		{
+			int i = z | (JOYSTICK?0x8000:0);
+			i |= (j<<8);
+			int n = i&0xFFF;
+			bool active = willAcceptInput && !S9xGetState(i);
+
+			if (active)
 			{
-				int mods = GetInitialModifiers(i);
-				WPARAM wparam = i | (mods << 16) | (j<<8);
-				PostMessage(MainWindow->getHWnd(), WM_CUSTKEYUP, wparam,(LPARAM)(joyState[n].repeatCount | (joyState[n].wasPressed ? 0x40000000 : 0)));
+				bool keyRepeat = (currentTime - joyState[n].firstPressedTime) >= (DWORD)KeyInDelayMSec;
+				if (!joyState[n].wasPressed || keyRepeat)
+				{
+					if (!joyState[n].wasPressed)
+						joyState[n].firstPressedTime = currentTime;
+					joyState[n].lastPressedTime = currentTime;
+					if (keyRepeat && joyState[n].repeatCount < 0xffff)
+						joyState[n].repeatCount++;
+					int mods = GetInitialModifiers(i);
+					WPARAM wparam = i | (mods << 16) | (j<<8);
+					PostMessage(mainWindow, WM_CUSTKEYDOWN, wparam,(LPARAM)(joyState[n].repeatCount | (joyState[n].wasPressed ? 0x40000000 : 0)));
+				}
 			}
+			else
+			{
+				joyState[n].repeatCount = 1;
+				if (joyState[n].wasPressed)
+				{
+					int mods = GetInitialModifiers(i);
+					WPARAM wparam = i | (mods << 16) | (j<<8);
+					PostMessage(mainWindow, WM_CUSTKEYUP, wparam,(LPARAM)(joyState[n].repeatCount | (joyState[n].wasPressed ? 0x40000000 : 0)));
+				}
+			}
+			joyState[n].wasPressed = active;
 		}
-		joyState[n].wasPressed = active;
-	}
 	}
 	lastTime = currentTime;
 }
@@ -2082,14 +2089,31 @@ void displayProc()
 }
 
 
-void displayThread(void*)
+void displayThread(void *arg)
 {
-	for(;;) {
-		if(display_die) return;
+	do
+	{
+		if ( (MainWindow == NULL) || IsMinimized(MainWindow->getHWnd()) )
+		{
+			WaitForSingleObject(display_wakeup_event, INFINITE);
+		}
+		else if ( (emu_paused || !execute || !romloaded) && (!HudEditorMode && !CommonSettings.hud.ShowInputDisplay && !CommonSettings.hud.ShowGraphicalInputDisplay) )
+		{
+			WaitForSingleObject(display_wakeup_event, 250);
+		}
+		else
+		{
+			WaitForSingleObject(display_wakeup_event, 10);
+		}
+		
+		if (display_die)
+		{
+			break;
+		}
+		
 		displayProc();
-		//Sleep(10); //don't be greedy and use a whole cpu core, but leave room for 60fps 
-		WaitForSingleObject(display_wakeup_event, 10); // same as sleep but lets something wake us up early
-	}
+
+	} while (!display_die);
 }
 
 void KillDisplay()
@@ -2135,6 +2159,8 @@ void Display()
 		memcpy(db.buffer,dispInfo.masterCustomBuffer,targetSize);
 
 		slock_unlock(display_mutex);
+
+		SetEvent(display_wakeup_event);
 	}
 }
 
@@ -2235,7 +2261,7 @@ static void StepRunLoop_Core()
 	}
 	inFrameBoundary = true;
 
-	DRV_AviFileWrite();
+	DRV_AviFileWriteStart();
 
 	CallRegisteredLuaFunctions(LUACALL_AFTEREMULATION);
 	ServiceDisplayThreadInvocations();
@@ -3515,7 +3541,6 @@ int _main()
 
 	KillDisplay();
 
-	DRV_AviFileWriteFinish();
 	DRV_AviEnd();
 	WAV_End();
 
@@ -3807,8 +3832,11 @@ void SetRotate(HWND hwnd, int rot, bool user)
 void AviEnd()
 {
 	NDS_Pause();
-	DRV_AviFileWriteFinish();
+
 	DRV_AviEnd();
+	LOG("AVI recording ended.");
+	driver->AddLine("AVI recording ended.");
+
 	NDS_UnPause();
 }
 
@@ -3868,9 +3896,21 @@ void AviRecordTo()
 	ofn.nMaxFile = MAX_PATH;
 	ofn.Flags = OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT | OFN_NOREADONLYRETURN | OFN_PATHMUSTEXIST;
 
-	if(GetSaveFileName(&ofn))
+	if (GetSaveFileName(&ofn))
 	{
-		DRV_AviBegin(folder);
+		if (AVI_IsRecording())
+		{
+			DRV_AviEnd();
+			LOG("AVI recording ended.");
+			driver->AddLine("AVI recording ended.");
+		}
+
+		bool result = DRV_AviBegin(folder);
+		if (result)
+		{
+			LOG("AVI recording started.");
+			driver->AddLine("AVI recording started.");
+		}
 	}
 
 	NDS_UnPause();
@@ -5076,6 +5116,7 @@ DOKEYDOWN:
 				
 				UpdateWndRects(hwnd);
 				MainWindowToolbar->OnSize();
+				SetEvent(display_wakeup_event);
 			}
 			break;
 		}
