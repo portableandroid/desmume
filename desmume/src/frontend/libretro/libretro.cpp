@@ -39,6 +39,8 @@ typedef void (glFramebufferTexture2DProc) (GLenum, GLenum, GLenum, GLuint, GLint
 static glFramebufferTexture2DProc *glFramebufferTexture2D = NULL;
 typedef void (glBlitFramebufferProc) (GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
 static glBlitFramebufferProc *glBlitFramebuffer = NULL;
+typedef void *(glMapBufferRangeProc) (GLenum, GLintptr, GLsizeiptr, GLbitfield);
+static glMapBufferRangeProc *glMapBufferRange = NULL;
 
 static GLuint internal_format = GL_RGB565;
 static GLuint texture_format  = GL_UNSIGNED_SHORT_5_6_5;
@@ -1385,6 +1387,7 @@ static bool initialize_gl()
     glDeleteFramebuffers = (glDeleteFramebuffersProc *) hw_render.get_proc_address ("glDeleteFramebuffers");
     glFramebufferTexture2D = (glFramebufferTexture2DProc *) hw_render.get_proc_address ("glFramebufferTexture2D");
     glBlitFramebuffer = (glBlitFramebufferProc *) hw_render.get_proc_address ("glBlitFramebuffer");
+    glMapBufferRange = (glMapBufferRangeProc *) hw_render.get_proc_address ("glMapBufferRange");
 
     if (!glBindFramebuffer || !glGenFramebuffers || !glDeleteFramebuffers || !glFramebufferTexture2D || !glBlitFramebuffer)
     {
@@ -2029,7 +2032,11 @@ void retro_run (void)
           /* Upload data via pixel-buffer object */
           glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
           glBufferData(GL_PIXEL_UNPACK_BUFFER, layout.width * layout.height * bpp, NULL, GL_STREAM_DRAW);
-          void *pbo_buffer = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY | GL_MAP_UNSYNCHRONIZED_BIT);
+          void *pbo_buffer;
+          if (glMapBufferRange)
+             pbo_buffer = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, layout.width * layout.height * bpp, GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
+          else
+             pbo_buffer = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
           memcpy(pbo_buffer, screen_buf, layout.width * layout.height * bpp);
           glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
 
