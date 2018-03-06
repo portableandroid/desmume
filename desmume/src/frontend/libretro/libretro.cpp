@@ -1437,7 +1437,8 @@ void retro_init (void)
 
     //addonsChangePak(NDS_ADDON_NONE);
     NDS_Init();
-    SPU_ChangeSoundCore(0, 735 * 2);
+    SPU_ChangeSoundCore(0, 740 * 2);
+    SPU_SetSynchMode(ESynchMode_Synchronous, ESynchMethod_N);
 
     const char *nickname;
     if (environ_cb(RETRO_ENVIRONMENT_GET_USERNAME, &nickname) && nickname)
