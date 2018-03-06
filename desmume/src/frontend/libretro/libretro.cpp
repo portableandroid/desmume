@@ -1230,7 +1230,7 @@ void SNDRetroSetVolume(int volume) {}
 
 void SNDRetroUpdateAudio(s16 *buffer, u32 num_samples)
 {
-    audio_batch_cb (buffer, num_samples);
+    audio_batch_cb(buffer, num_samples);
 }
 
 SoundInterface_struct SNDRetro = {
@@ -1242,7 +1242,10 @@ SoundInterface_struct SNDRetro = {
     SNDRetroGetAudioSpace,
     SNDRetroMuteAudio,
     SNDRetroUnMuteAudio,
-    SNDRetroSetVolume
+    SNDRetroSetVolume,
+    NULL,
+    NULL,
+    NULL
 };
 
 SoundInterface_struct *SNDCoreList[] = {
