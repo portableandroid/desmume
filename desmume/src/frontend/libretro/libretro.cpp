@@ -71,6 +71,9 @@ volatile bool execute = 0;
 static int delay_timer = 0;
 static bool quick_switch_enable = false;
 static bool mouse_enable = false;
+static double mouse_speed= 1.0;
+static double mouse_x_delta = 0.0;
+static double mouse_y_delta = 0.0;
 static int pointer_device_l = 0;
 static int pointer_device_r = 0;
 static int analog_stick_deadzone;
@@ -930,6 +933,15 @@ static void check_variables(bool first_boot)
         touchEnabled = var.value && (!strcmp(var.value, "touch"));
     }
 
+    var.key = "desmume_mouse_speed";
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        mouse_speed = (float) atof(var.value);
+    }
+    else
+        mouse_speed = 1.0f;
+
     var.key = "desmume_frameskip";
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -1299,6 +1311,7 @@ void retro_set_environment(retro_environment_t cb)
       { "desmume_hybrid_cursor_always_smallscreen", "Hybrid Layout: Cursor Always on Small Screen; enabled|disabled"},
       { "desmume_pointer_mouse", "Mouse/Pointer; enabled|disabled" },
       { "desmume_pointer_type", "Pointer Type; mouse|touch" },
+      { "desmume_mouse_speed", "Mouse Speed; 1.0|1.5|2.0|0.125|0.25|0.5"},
       { "desmume_pointer_device_l", "Pointer Mode for Left Analog; none|emulated|absolute|pressed" },
       { "desmume_pointer_device_r", "Pointer Mode for Right Analog; none|emulated|absolute|pressed" },
       { "desmume_pointer_device_deadzone", "Emulated Pointer Deadzone Percent; 15|20|25|30|35|0|5|10" },
@@ -1758,9 +1771,17 @@ void retro_run (void)
       // TOUCH: Mouse
       if(!touchEnabled)
       {
-         const int16_t mouseX = input_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
-         const int16_t mouseY = input_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
+         int16_t mouseX = input_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
+         int16_t mouseY = input_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
          have_touch           = have_touch || input_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
+
+         mouse_x_delta += mouseX * mouse_speed;
+         mouse_y_delta += mouseY * mouse_speed;
+
+         mouseX = (int16_t) trunc(mouse_x_delta);
+         mouse_x_delta -= mouseX;
+         mouseY = (int16_t) trunc(mouse_y_delta);
+         mouse_y_delta -= mouseY;
 
          TouchX = Saturate(0, (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH-1), TouchX + mouseX);
          TouchY = Saturate(0, (GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT-1), TouchY + mouseY);
