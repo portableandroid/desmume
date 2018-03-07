@@ -78,7 +78,7 @@ ifneq (,$(findstring unix,$(platform)))
 else ifeq ($(platform), osx)
    TARGET := $(TARGET_NAME)_libretro.dylib
    fpic := -fPIC
-   SHARED := -dynamiclib
+   SHARED := -dynamiclib -framework OpenGL
    DESMUME_JIT = 1
    fpic += -mmacosx-version-min=10.2
    ifndef ($(NOUNIVERSAL))
