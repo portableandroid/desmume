@@ -1235,14 +1235,14 @@ GPU3DInterface* core3DList[] =
 
 int SNDRetroInit(int buffersize) { return 0; }
 void SNDRetroDeInit() {}
-u32 SNDRetroGetAudioSpace() { return 65536; }
+u32 SNDRetroGetAudioSpace() { return 0; }
 void SNDRetroMuteAudio() {}
 void SNDRetroUnMuteAudio() {}
 void SNDRetroSetVolume(int volume) {}
-
-void SNDRetroUpdateAudio(s16 *buffer, u32 num_samples)
+void SNDRetroUpdateAudio(s16 *buffer, u32 num_samples) {}
+void SNDRetroFetchSamples(s16 *sampleBuffer, size_t sampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer)
 {
-    audio_batch_cb(buffer, num_samples);
+    audio_batch_cb(sampleBuffer, sampleCount);
 }
 
 SoundInterface_struct SNDRetro = {
@@ -1256,7 +1256,7 @@ SoundInterface_struct SNDRetro = {
     SNDRetroUnMuteAudio,
     SNDRetroSetVolume,
     NULL,
-    NULL,
+    SNDRetroFetchSamples,
     NULL
 };
 
@@ -1453,8 +1453,7 @@ void retro_init (void)
 
     //addonsChangePak(NDS_ADDON_NONE);
     NDS_Init();
-    SPU_ChangeSoundCore(0, 740 * 2);
-    SPU_SetSynchMode(ESynchMode_Synchronous, ESynchMethod_N);
+    SPU_ChangeSoundCore(0, 0);
 
     const char *nickname;
     if (environ_cb(RETRO_ENVIRONMENT_GET_USERNAME, &nickname) && nickname)
