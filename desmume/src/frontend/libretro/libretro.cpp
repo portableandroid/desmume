@@ -1452,6 +1452,7 @@ void retro_init (void)
     fw_config.language = firmwareLanguage;
 
     //addonsChangePak(NDS_ADDON_NONE);
+    CommonSettings.spu_captureMuted = true;
     NDS_Init();
     SPU_ChangeSoundCore(0, 0);
 
