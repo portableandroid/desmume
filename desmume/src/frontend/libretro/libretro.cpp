@@ -17,6 +17,7 @@
 #include "SPU.h"
 #include "emufile.h"
 #include "common.h"
+#include "path.h"
 
 #ifdef HAVE_OPENGL
 #include "OGLRender.h"
@@ -744,6 +745,78 @@ static void check_variables(bool first_boot)
          }
       }
 
+      var.key = "desmume_cpu_mode";
+      var.value = 0;
+
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      {
+          if (!strcmp(var.value, "jit"))
+              CommonSettings.use_jit = true;
+          else if (!strcmp(var.value, "interpreter"))
+              CommonSettings.use_jit = false;
+      }
+     else
+     {
+#ifdef HAVE_JIT
+        CommonSettings.use_jit = true;
+#else
+        CommonSettings.use_jit = false;
+#endif
+     }
+
+#ifdef HAVE_JIT
+      var.key = "desmume_jit_block_size";
+
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+          CommonSettings.jit_max_block_size = var.value ? strtol(var.value, 0, 10) : 100;
+      else
+          CommonSettings.jit_max_block_size = 100;
+#endif
+
+      var.key = "desmume_use_external_bios";
+
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      {
+          const char *system_directory = NULL;
+
+          if (!strcmp(var.value, "enabled"))
+          {
+              if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &system_directory) && system_directory)
+              {
+                  std::string bios7_loc    = std::string(system_directory) + DIRECTORY_DELIMITER_CHAR + "bios7.bin";
+                  std::string bios9_loc    = std::string(system_directory) + DIRECTORY_DELIMITER_CHAR + "bios9.bin";
+                  std::string firmware_loc = std::string(system_directory) + DIRECTORY_DELIMITER_CHAR + "firmware.bin";
+
+                  strncpy(CommonSettings.ARM7BIOS, bios7_loc.c_str(), 256);
+                  strncpy(CommonSettings.ARM9BIOS, bios9_loc.c_str(), 256);
+                  strncpy(CommonSettings.Firmware, firmware_loc.c_str(), 256);
+
+                  CommonSettings.ARM7BIOS[255] = '\0';
+                  CommonSettings.ARM9BIOS[255] = '\0';
+                  CommonSettings.Firmware[255] = '\0';
+              }
+
+              CommonSettings.UseExtBIOS = true;
+              CommonSettings.UseExtFirmware = true;
+              CommonSettings.SWIFromBIOS = true;
+              CommonSettings.PatchSWI3 = true;
+          }
+      }
+
+      var.key = "desmume_boot_into_bios";
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      {
+          if (!strcmp(var.value, "enabled"))
+          {
+              if (CommonSettings.UseExtBIOS && !CommonSettings.use_jit)
+                  CommonSettings.BootFromFirmware = true;
+              else
+              {
+                  log_cb (RETRO_LOG_WARN, "Cannot boot into BIOS. Must enable external bios and interpreter mode.\n");
+              }
+          }
+      }
+
       var.key = "desmume_opengl_mode";
 
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -801,34 +874,6 @@ static void check_variables(bool first_boot)
        CommonSettings.num_cores = var.value ? strtol(var.value, 0, 10) : 1;
    else
        CommonSettings.num_cores = 1;
-
-    var.key = "desmume_cpu_mode";
-    var.value = 0;
-
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-    {
-        if (!strcmp(var.value, "jit"))
-            CommonSettings.use_jit = true;
-        else if (!strcmp(var.value, "interpreter"))
-            CommonSettings.use_jit = false;
-    }
-   else
-   {
-#ifdef HAVE_JIT
-      CommonSettings.use_jit = true;
-#else
-      CommonSettings.use_jit = false;
-#endif
-   }
-
-#ifdef HAVE_JIT
-    var.key = "desmume_jit_block_size";
-
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-        CommonSettings.jit_max_block_size = var.value ? strtol(var.value, 0, 10) : 100;
-    else
-        CommonSettings.jit_max_block_size = 100;
-#endif
 
     var.key = "desmume_screens_layout";
 
@@ -1277,6 +1322,8 @@ void retro_set_environment(retro_environment_t cb)
    static const retro_variable values[] =
    {
       { "desmume_firmware_language", "Firmware Language; Auto|English|Japanese|French|German|Italian|Spanish" },
+      { "desmume_use_external_bios", "Use External BIOS/Firmware (restart); disabled|enabled" },
+      { "desmume_boot_into_bios", "Boot Into BIOS (interpreter and external bios only); disabled|enabled"},
       { "desmume_load_to_memory", "Load Game Into Memory (restart); disabled|enabled" },
       { "desmume_num_cores", "CPU Cores; 1|2|3|4" },
 #ifdef HAVE_JIT
@@ -1460,17 +1507,17 @@ void retro_init (void)
     const char *nickname;
     if (environ_cb(RETRO_ENVIRONMENT_GET_USERNAME, &nickname) && nickname)
     {
-       int len = strlen(nickname);
+        int len = strlen(nickname);
 
-       if (len > MAX_FW_NICKNAME_LENGTH)
-          len = MAX_FW_NICKNAME_LENGTH;
-        
-       if (len > 0)
-       {
-          for (int i = 0; i < len; i++)
-          fw_config.nickname[i] = nickname[i];
-          fw_config.nickname_len = len;
-       }
+        if (len > MAX_FW_NICKNAME_LENGTH)
+            len = MAX_FW_NICKNAME_LENGTH;
+
+        if (len > 0)
+        {
+            for (int i = 0; i < len; i++)
+                fw_config.nickname[i] = nickname[i];
+            fw_config.nickname_len = len;
+        }
     }
 
     NDS_CreateDummyFirmware(&fw_config);
