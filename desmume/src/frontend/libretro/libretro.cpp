@@ -1455,6 +1455,7 @@ void retro_init (void)
     CommonSettings.spu_captureMuted = true;
     NDS_Init();
     SPU_ChangeSoundCore(0, 0);
+    SPU_SetSynchMode(ESynchMode_Synchronous, ESynchMethod_N);
 
     const char *nickname;
     if (environ_cb(RETRO_ENVIRONMENT_GET_USERNAME, &nickname) && nickname)
