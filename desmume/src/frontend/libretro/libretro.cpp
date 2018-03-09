@@ -809,7 +809,10 @@ static void check_variables(bool first_boot)
           if (!strcmp(var.value, "enabled"))
           {
               if (CommonSettings.UseExtBIOS && !CommonSettings.use_jit)
+              {
                   CommonSettings.BootFromFirmware = true;
+                  CommonSettings.UseExtFirmwareSettings = true;
+              }
               else
               {
                   log_cb (RETRO_LOG_WARN, "Cannot boot into BIOS. Must enable external bios and interpreter mode.\n");
