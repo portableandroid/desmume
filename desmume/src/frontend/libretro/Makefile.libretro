@@ -301,8 +301,8 @@ else
    TARGET := $(TARGET_NAME)_libretro.dll
    CC = gcc
    CXX = g++
-   CFLAGS += -DHAVE_OPENGL
-   CXXFLAGS += -DHAVE_OPENGL
+   CFLAGS += -DHAVE_OPENGL -fno-strict-aliasing
+   CXXFLAGS += -DHAVE_OPENGL -fno-strict-aliasing
    LIBS += -lopengl32
    SHARED := -shared -static-libgcc -static-libstdc++ -Wl,--version-script=$(CORE_DIR)/frontend/libretro/link.T
    ifeq ($(DEBUG), 0)
@@ -320,7 +320,7 @@ ifeq ($(DESMUME_JIT_ARM),1)
 endif
 
 ifeq ($(DESMUME_JIT),1)
-   CXXFLAGS += -DHAVE_JIT -DJIT_FUNCS_FLAT
+   CXXFLAGS += -DHAVE_JIT
 endif
 
 include Makefile.common
