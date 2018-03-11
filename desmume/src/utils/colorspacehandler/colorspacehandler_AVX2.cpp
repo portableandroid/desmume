@@ -30,7 +30,7 @@ FORCEINLINE void ColorspaceConvert555To8888_AVX2(const v256u16 &srcColor, const 
 	// Conversion algorithm:
 	//    RGB   5-bit to 8-bit formula: dstRGB8 = (srcRGB5 << 3) | ((srcRGB5 >> 2) & 0x07)
 	
-	v256u16 rb = _mm256_and_si256( _mm256_or_si256(_mm256_slli_epi32(srcColor, 11), _mm256_srli_epi16(srcColor, 7)), _mm256_set1_epi16(0xF8F8) );
+	v256u16 rb = _mm256_and_si256( _mm256_or_si256(_mm256_slli_epi16(srcColor, 11), _mm256_srli_epi16(srcColor, 7)), _mm256_set1_epi16(0xF8F8) );
 	v256u16 ga = _mm256_or_si256( _mm256_and_si256(_mm256_srli_epi16(srcColor, 2), _mm256_set1_epi16(0x00F8)), srcAlphaBits);
 	
 	rb = _mm256_permute4x64_epi64(rb, 0xD8);
