@@ -2216,6 +2216,10 @@ bool retro_load_game(const struct retro_game_info *game)
        {
            log_cb(RETRO_LOG_ERROR, "Couldn't create rendering context. Using software rasterizer.\n");
            opengl_mode = false;
+           bpp = 2;
+           colorMode = RETRO_PIXEL_FORMAT_RGB565;
+           environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &colorMode);
+           GPU->SetColorFormat(NDSColorFormat_BGR555_Rev);
        }
    }
 #endif
