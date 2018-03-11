@@ -51,7 +51,7 @@ FORCEINLINE void ColorspaceConvert555To6665_AVX2(const v256u16 &srcColor, const 
 	// Conversion algorithm:
 	//    RGB   5-bit to 6-bit formula: dstRGB6 = (srcRGB5 << 1) | ((srcRGB5 >> 4) & 0x01)
 	
-	v256u16 rb = _mm256_and_si256( _mm256_or_si256(_mm256_slli_epi32(srcColor, 9), _mm256_srli_epi16(srcColor, 9)), _mm256_set1_epi16(0x3E3E) );
+	v256u16 rb = _mm256_and_si256( _mm256_or_si256(_mm256_slli_epi16(srcColor, 9), _mm256_srli_epi16(srcColor, 9)), _mm256_set1_epi16(0x3E3E) );
 	v256u16 ga = _mm256_or_si256( _mm256_and_si256(_mm256_srli_epi16(srcColor, 4), _mm256_set1_epi16(0x003E)), srcAlphaBits);
 	
 	rb = _mm256_permute4x64_epi64(rb, 0xD8);
