@@ -49,6 +49,10 @@ static GLuint texture_type    = GL_RGB;
 
 #endif
 
+#if defined(__SSE2__)
+#include <emmintrin.h>
+#endif
+
 #define LAYOUT_TOP_BOTTOM                 0
 #define LAYOUT_BOTTOM_TOP                 1
 #define LAYOUT_LEFT_RIGHT                 2
@@ -267,70 +271,98 @@ static bool NDS_3D_ChangeCore(int newCore)
 }
 
 #define CONVERT_COLOR(color) (((color & 0x001f) << 11) | ((color & 0x03e0) << 1) | ((color & 0x0200) >> 4) | ((color & 0x7c00) >> 10))
+void conv_0rgb1555_rb_swapped_rgb565(void * __restrict output_, const void * __restrict input_,
+      int width, int height,
+      int out_stride, int in_stride)
+{
+   int h, max_width;
+   const uint16_t *input   = (const uint16_t*)input_;
+   uint16_t *output        = (uint16_t*)output_;
 
-bool Resample_Screen(int w1, int h1, bool shrink, const uint16_t *old, uint16_t *ret)
-    {
-		int w2, h2, x2, y2 ;
-		if(shrink)
-		{
-			w2 = w1/3;
-			h2 = h1/3;
-		}
-		else
-		{
-			w2 = w1*3;
-			h2 = h1*3;
-		}
+#if defined(__SSE2__)
+   max_width = width - 7;
+   const __m128i b_mask = _mm_set1_epi16(0x001f);
+   const __m128i g_mask = _mm_set1_epi16(0x07c0);
+   const __m128i r_mask = _mm_set1_epi16(0xf800);
+   const __m128i a_mask = _mm_set1_epi16(0x0020);
+#elif defined(HOST_64)
+   max_width = width - 3;
+   const uint64_t b_mask = 0x001f001f001f001f;
+   const uint64_t g_mask = 0x07c007c007c007c0;
+   const uint64_t r_mask = 0xf800f800f800f800;
+   const uint64_t a_mask = 0x0020002000200020;
+#else
+   max_width = width - 1;
+   const uint64_t b_mask = 0x001f001f;
+   const uint64_t g_mask = 0x07c007c0;
+   const uint64_t r_mask = 0xf800f800;
+   const uint64_t a_mask = 0x00200020;
+#endif
 
-		for (int i=0;i<h2;i++)
-		{
-			for (int j=0;j<w2;j++)
-			{
-				if(shrink){
-					x2 = j*3;
-					y2 = i*3;
-				}
-				else{
-					x2 = j/3;
-					y2 = i/3;
-				}
-				ret[(i*w2)+j] = old[(y2*w1)+x2] ;
-			}
-		}
-        return true;
-    }
+   for (h = 0; h < height;
+         h++, output += out_stride, input += in_stride)
+   {
+      int w = 0;
+#if defined(__SSE2__)
+      for (; w < max_width; w += 8)
+      {
+         const __m128i in = _mm_loadu_si128((const __m128i*)(input + w));
+         __m128i r = _mm_and_si128(_mm_slli_epi16(in, 11), r_mask);
+         __m128i g = _mm_and_si128(_mm_slli_epi16(in, 1 ), g_mask);
+         __m128i b = _mm_and_si128(_mm_srli_epi16(in, 10), b_mask);
+         __m128i a = _mm_and_si128(_mm_srli_epi16(in, 4 ), a_mask);
+         _mm_storeu_si128((__m128i*)(output + w),
+                          _mm_or_si128(r, _mm_or_si128(g, _mm_or_si128(b, a))));
+      }
+#elif defined(HOST_64)
+      for (; w < max_width; w += 4)
+      {
+         const uint64_t in = *((uint64_t *)(input + w));
+         uint64_t r = (in << 11) & r_mask;
+         uint64_t g = (in << 1 ) & g_mask;
+         uint64_t b = (in >> 10) & b_mask;
+         uint64_t a = (in >> 4 ) & a_mask;
+         *((uint64_t *)(output + w)) = r | g | b | a;
+      }
+#else
+      for (; w < max_width; w += 2)
+      {
+         const uint32_t in = *((uint32_t *)(input + w));
+         uint32_t r = (in << 11) & r_mask;
+         uint32_t g = (in << 1 ) & g_mask;
+         uint32_t b = (in >> 10) & b_mask;
+         uint32_t a = (in >> 4 ) & a_mask;
+         *((uint32_t *)(output + w)) = r | g | b | a;
+      }
+#endif
 
-static void BlankScreenSmallSection(uint16_t *pt1, const uint16_t *pt2){
-	//Ensures above the hybrid screens is blank - If someone changes screen layout, stuff will be leftover otherwise
-	unsigned i;
-	pt1 += hybrid_layout_scale*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
-	while( pt1 < pt2)
-	{
-		int awidth = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/3;
-		memset(pt1, 0, hybrid_layout_scale*awidth*sizeof(uint16_t));
-		pt1 += hybrid_layout_scale*(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/3 + GPU_LR_FRAMEBUFFER_NATIVE_WIDTH);
-	}
+      for (; w < width; w++)
+      {
+         uint16_t col  = input[w];
+         output[w]     = CONVERT_COLOR(col);
+      }
+   }
 }
 
 static void SwapScreen(uint16_t *dst, const uint16_t *src, uint32_t pitch)
 {
-   unsigned i, j;
-   uint32_t skip = pitch - GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
-
-   for(i = 0; i < GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT; i ++)
-   {
-      for(j = 0; j < GPU_LR_FRAMEBUFFER_NATIVE_WIDTH; j ++)
-      {
-         uint16_t col = *src++;
-         *dst++ = CONVERT_COLOR(col);
-      }
-      dst += skip;
-   }
+   conv_0rgb1555_rb_swapped_rgb565(dst,
+                                   src,
+                                   GPU_LR_FRAMEBUFFER_NATIVE_WIDTH,
+                                   GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT,
+                                   pitch,
+                                   GPU_LR_FRAMEBUFFER_NATIVE_WIDTH);
 }
 
 static void SwapScreen_32(uint32_t *dst, const uint32_t *src, uint32_t pitch)
 {
    unsigned i;
+
+   if (pitch == GPU_LR_FRAMEBUFFER_NATIVE_WIDTH)
+   {
+       memcpy (dst, src, GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT * 4);
+       return;
+   }
 
    for(i = 0; i < GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT; i++)
    {
@@ -404,91 +436,62 @@ static void SwapScreenSmall_32(uint32_t *dst, const uint32_t *src, uint32_t pitc
 
 static void SwapScreenLarge(uint16_t *dst, const uint16_t *src, uint32_t pitch)
 {
-	/*
-	This method uses Nearest Neighbour to resize the primary screen to 3 times its original width and 3 times its original height.
-	It is a lot faster than the previous method. If we want to apply some different method of scaling this needs to change.
-	*/
-	unsigned i, j, k;
-	uint32_t skip = pitch - hybrid_layout_scale*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
+    unsigned y, x, z;
 
-	unsigned heightlimit = hybrid_layout_scale*GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
-	for(i = 0; i < heightlimit; i ++)
-   {
-	  if( i%hybrid_layout_scale != 0)
-		  src -= GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
-      for(j = 0; j < GPU_LR_FRAMEBUFFER_NATIVE_WIDTH; j ++)
-      {
-		 uint16_t col = *src++;
-		 for(k = 0; k < hybrid_layout_scale; ++k)
-			*dst++ = CONVERT_COLOR(col);
-      }
-      dst += skip;
-   }
+    for (y = 0; y < GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT; y++)
+    {
+         uint16_t *out = dst + (y * hybrid_layout_scale) * pitch;
+         for (x = 0; x < GPU_LR_FRAMEBUFFER_NATIVE_WIDTH; x++)
+         {
+             for (z = 0; z < hybrid_layout_scale; z++)
+                 out[x * hybrid_layout_scale + z] = CONVERT_COLOR(src[y * GPU_LR_FRAMEBUFFER_NATIVE_WIDTH + x]);
+         }
+
+         for (z = 1; z < hybrid_layout_scale; z++)
+             memcpy (dst + ((y * hybrid_layout_scale) + z) * pitch, out, GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * hybrid_layout_scale * 2);
+    }
 }
 
 static void SwapScreenSmall(uint16_t *dst, const uint16_t *src, uint32_t pitch, bool first, bool draw)
 {
-   unsigned i, j;
-	int addgap = gap_size() * hybrid_layout_scale * scale;
+    unsigned x, y;
 
-	//If it is the bottom screen, start drawing lower down.
-	if(!first)
-	{
-		dst += hybrid_layout_scale*(GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT/3)*hybrid_layout_scale*(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH + GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/3);
-		//Make Sure The Screen Gap is Empty
-		for(i=0; i< addgap; ++i)
-		{
-			memset(dst, 0, hybrid_layout_scale*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/3*sizeof(uint16_t));
-			dst += hybrid_layout_scale*(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/3 + GPU_LR_FRAMEBUFFER_NATIVE_WIDTH);
-		}
-	}
+    if(!first)
+    {
+        int screenheight = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT * hybrid_layout_scale / 3;
+        int gapheight    = gap_size() * hybrid_layout_scale * scale;
+        // If it is the bottom screen, move the pointer down by a screen and the gap
+        dst += (screenheight + gapheight) * pitch;
+    }
 
-	if(hybrid_layout_scale != 3)
-	{
-		//Shrink to 1/3 the width and 1/3 the height
-		uint16_t *resampl;
-		resampl = (uint16_t*)malloc(GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/9*sizeof(uint16_t));
-		Resample_Screen(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT, true, src, resampl);
-
-		for(i=0; i<GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT/3; ++i)
-		{
-			if(draw)
-			{
-				for(j=0; j<GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/3; ++j)
-					*dst++ = CONVERT_COLOR(resampl[i*(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/3)+j]);
-			}
-			else
-			{
-				memset(dst, 0, GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/3*sizeof(uint16_t));
-				dst += GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/3;
-			}
-			dst += GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
-		}
-		free(resampl);
-	}
-	else
-	{
-		uint32_t skip = pitch - GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
-		for(i=0; i<GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT; ++i)
-		{
-			if(draw)
-			{
-				for(j=0; j<GPU_LR_FRAMEBUFFER_NATIVE_WIDTH-1; ++j)
-				{
-					uint16_t col = *src++;
-					*dst++ = CONVERT_COLOR(col);
-				}
-			}
-			else
-			{
-				memset(dst, 0, (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH-1)*sizeof(uint16_t));
-				dst += GPU_LR_FRAMEBUFFER_NATIVE_WIDTH-1;
-			}
-			//Cuts off last pixel in width, because 3 does not divide native_width evenly. This prevents overwriting some of the main screen
-			*src++; *dst++;
-			dst += skip;
-		}
-	}
+    if (hybrid_layout_scale != 3)
+    {
+        //Shrink to 1/3 the width and 1/3 the height
+        for(y = 0; y < GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT / 3; y++)
+        {
+            if (draw)
+            {
+                for(x = 0; x < GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / 3; x++)
+                {
+                    *dst++ = CONVERT_COLOR(src[3 * (y * GPU_LR_FRAMEBUFFER_NATIVE_WIDTH + x)]);
+                }
+            }
+            else
+            {
+                dst += GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / 3;
+            }
+            dst += GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
+        }
+    }
+    else
+    {
+        conv_0rgb1555_rb_swapped_rgb565(dst,
+                                        src,
+                                        (pitch - GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * 3),
+                                        GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT,
+                                        pitch,
+                                        GPU_LR_FRAMEBUFFER_NATIVE_WIDTH);
+    }
 }
 
 namespace
@@ -2046,7 +2049,6 @@ void retro_run (void)
                           SwapScreenLarge(layout.dst,  screen, layout.pitch);
                       else
                           SwapScreen (layout.dst,  screen, layout.pitch);
-                      BlankScreenSmallSection(layout.dst, layout.dst2);
                       SwapScreenSmall(layout.dst2, screen, layout.pitch, true, hybrid_layout_showbothscreens);
                   }
                   else if (current_layout == LAYOUT_HYBRID_BOTTOM_ONLY)
@@ -2059,7 +2061,6 @@ void retro_run (void)
                           SwapScreenLarge(layout.dst2,  screen, layout.pitch);
                       else
                           SwapScreen (layout.dst2,  screen, layout.pitch);
-                      BlankScreenSmallSection(layout.dst2, layout.dst);
                       SwapScreenSmall (layout.dst, screen, layout.pitch, false , hybrid_layout_showbothscreens);
                       //Keep the Touch Cursor on the Small Screen, even if the bottom is the primary screen? Make this configurable by user? (Needs work to get working with hybrid_layout_scale==3 and layout_hybrid_bottom_only)
                       if(hybrid_cursor_always_smallscreen && hybrid_layout_showbothscreens)

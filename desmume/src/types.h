@@ -29,7 +29,7 @@
 #endif //_MSC_VER
 
 // Determine CPU architecture for platforms that don't use the autoconf script
-#if defined(__x86_64__) || defined(__LP64) || defined(__IA64__) || defined(_M_X64) || defined(_WIN64)
+#if defined(__x86_64__) || defined(__LP64) || defined(__IA64__) || defined(_M_X64) || defined(_WIN64) || defined (__aarch64__)
 #define HOST_64
 #else
 #define HOST_32
