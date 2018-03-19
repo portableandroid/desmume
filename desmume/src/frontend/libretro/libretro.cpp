@@ -888,8 +888,10 @@ static void check_variables(bool first_boot)
             break;
       }
 
-      if (!first_boot)
+      if (!first_boot && GPU->GetCustomFramebufferWidth() != GPU_LR_FRAMEBUFFER_NATIVE_WIDTH)
+      {
          GPU->SetCustomFramebufferSize (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT);
+      }
    }
 
    var.key = "desmume_num_cores";
