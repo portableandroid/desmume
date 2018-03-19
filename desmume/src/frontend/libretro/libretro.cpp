@@ -94,6 +94,8 @@ static uint16_t pointer_colour = 0xFFFF;
 int multisample_level;
 static uint32_t pointer_color_32 = 0xFFFFFFFF;
 static int bpp = 2;
+static int current_max_width = 0;
+static int current_max_height = 0;
 
 static retro_pixel_format colorMode = RETRO_PIXEL_FORMAT_RGB565;
 static uint32_t frameSkip;
@@ -515,12 +517,24 @@ void retro_get_system_info(struct retro_system_info *info)
    info->block_extract = false;
 }
 
-static void get_layout_params(unsigned id, uint16_t *srcbuf, LayoutData *layout)
+static u8 *update_screen_buf_size(int bsize)
+{
+    static int screen_buf_bsize = 0;
+
+    if (screen_buf_bsize != bsize)
+    {
+        screen_buf = (u16 *) realloc(screen_buf, bsize);
+        screen_buf_bsize = bsize;
+    }
+
+    return (u8 *) screen_buf;
+}
+
+static void get_layout_params(unsigned id, bool update_ptrs, LayoutData *layout)
 {
    int awidth, bwidth;
 
    /* Helper variables */
-   uint8_t *src = (uint8_t *) srcbuf;
    int bytewidth = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * bpp;
    int byteheight = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
    int gapwidth   = gap_size() * bpp * scale;
@@ -532,11 +546,6 @@ static void get_layout_params(unsigned id, uint16_t *srcbuf, LayoutData *layout)
    switch (id)
    {
       case LAYOUT_TOP_BOTTOM:
-         if (src)
-         {
-            layout->dst    = (uint16_t*) src;
-            layout->dst2   = (uint16_t*) (src + bytewidth * (byteheight + gapsize));
-         }
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT * 2 + gapsize;
          layout->pitch  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
@@ -545,13 +554,15 @@ static void get_layout_params(unsigned id, uint16_t *srcbuf, LayoutData *layout)
 
          layout->draw_screen1  = true;
          layout->draw_screen2  = true;
+
+         if (update_ptrs)
+         {
+            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
+            layout->dst    = (uint16_t*) src;
+            layout->dst2   = (uint16_t*) (src + bytewidth * (byteheight + gapsize));
+         }
          break;
       case LAYOUT_BOTTOM_TOP:
-         if (src)
-         {
-            layout->dst   = (uint16_t*) (src + bytewidth * (byteheight + gapsize));
-            layout->dst2  = (uint16_t*) src;
-         }
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT * 2 + gapsize;
          layout->pitch  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
@@ -560,13 +571,15 @@ static void get_layout_params(unsigned id, uint16_t *srcbuf, LayoutData *layout)
 
          layout->draw_screen1  = true;
          layout->draw_screen2  = true;
+
+         if (update_ptrs)
+         {
+            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
+            layout->dst   = (uint16_t*) (src + bytewidth * (byteheight + gapsize));
+            layout->dst2  = (uint16_t*) src;
+         }
          break;
       case LAYOUT_LEFT_RIGHT:
-         if (src)
-         {
-            layout->dst    = (uint16_t*) src;
-            layout->dst2   = (uint16_t*) (src + bytewidth + gapwidth);
-         }
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * 2 + gapsize;
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
          layout->pitch  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * 2 + gapsize;
@@ -575,13 +588,15 @@ static void get_layout_params(unsigned id, uint16_t *srcbuf, LayoutData *layout)
 
          layout->draw_screen1  = true;
          layout->draw_screen2  = true;
+
+         if (update_ptrs)
+         {
+            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
+            layout->dst    = (uint16_t*) src;
+            layout->dst2   = (uint16_t*) (src + bytewidth + gapwidth);
+         }
          break;
       case LAYOUT_RIGHT_LEFT:
-         if (src)
-         {
-            layout->dst   = (uint16_t*) (src + bytewidth + gapwidth);
-            layout->dst2  = (uint16_t*) src;
-         }
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * 2 + gapsize;
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
          layout->pitch  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * 2 + gapsize;
@@ -590,11 +605,16 @@ static void get_layout_params(unsigned id, uint16_t *srcbuf, LayoutData *layout)
 
          layout->draw_screen1  = true;
          layout->draw_screen2  = true;
-         break;
 
+         if (update_ptrs)
+         {
+            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
+            layout->dst   = (uint16_t*) (src + bytewidth + gapwidth);
+            layout->dst2  = (uint16_t*) src;
+         }
+         break;
       case LAYOUT_HYBRID_TOP_ONLY:
       case LAYOUT_HYBRID_BOTTOM_ONLY:
-
          awidth = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / 3;
          bwidth = awidth * bpp;
 
@@ -618,8 +638,9 @@ static void get_layout_params(unsigned id, uint16_t *srcbuf, LayoutData *layout)
              layout->draw_screen2 = true;
          }
 
-         if (src)
+         if (update_ptrs)
          {
+            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
             layout->dst = (uint16_t*) src;
 
             uint8_t *out = src; // Start pointer
@@ -642,11 +663,6 @@ static void get_layout_params(unsigned id, uint16_t *srcbuf, LayoutData *layout)
 
          break;
       case LAYOUT_TOP_ONLY:
-         if (src)
-         {
-            layout->dst    = (uint16_t*) src;
-            layout->dst2   = (uint16_t*) (src + bytewidth * byteheight);
-         }
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
          layout->pitch  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
@@ -654,13 +670,15 @@ static void get_layout_params(unsigned id, uint16_t *srcbuf, LayoutData *layout)
          layout->touch_y= GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
 
          layout->draw_screen1 = true;
+
+         if (update_ptrs)
+         {
+            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
+            layout->dst    = (uint16_t*) src;
+            layout->dst2   = (uint16_t*) (src + bytewidth * byteheight);
+         }
          break;
       case LAYOUT_BOTTOM_ONLY:
-         if (src)
-         {
-            layout->dst    = (uint16_t*) (src + bytewidth * byteheight);
-            layout->dst2   = (uint16_t*) src;
-         }
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
          layout->pitch  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
@@ -668,6 +686,13 @@ static void get_layout_params(unsigned id, uint16_t *srcbuf, LayoutData *layout)
          layout->touch_y= GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
 
          layout->draw_screen2 = true;
+
+         if (update_ptrs)
+         {
+            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
+            layout->dst    = (uint16_t*) (src + bytewidth * byteheight);
+            layout->dst2   = (uint16_t*) src;
+         }
          break;
    }
 }
@@ -675,7 +700,7 @@ static void get_layout_params(unsigned id, uint16_t *srcbuf, LayoutData *layout)
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
    struct LayoutData layout;
-   get_layout_params(current_layout, NULL, &layout);
+   get_layout_params(current_layout, false, &layout);
 
    info->geometry.base_width   = layout.width;
    info->geometry.base_height  = layout.height;
@@ -700,57 +725,7 @@ static void check_variables(bool first_boot)
     struct retro_variable var = {0};
 
    if (first_boot)
-   {
-      var.key = "desmume_internal_resolution";
-
-      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-      {
-         char *pch;
-         char str[100];
-         snprintf(str, sizeof(str), "%s", var.value);
-
-         pch = strtok(str, "x");
-         if (pch)
-            GPU_LR_FRAMEBUFFER_NATIVE_WIDTH = strtoul(pch, NULL, 0);
-         pch = strtok(NULL, "x");
-         if (pch)
-            GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT = strtoul(pch, NULL, 0);
-
-         switch (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH)
-         {
-            case 256:
-               scale = 1;
-               break;
-            case 512:
-               scale = 2;
-               break;
-            case 768:
-               scale = 3;
-               break;
-            case 1024:
-               scale = 4;
-               break;
-            case 1280:
-               scale = 5;
-               break;
-            case 1536:
-               scale = 6;
-               break;
-            case 1792:
-               scale = 7;
-               break;
-            case 2048:
-               scale = 8;
-               break;
-            case 2304:
-               scale = 9;
-               break;
-            case 2560:
-               scale = 10;
-               break;
-         }
-      }
-
+   { 
       var.key = "desmume_cpu_mode";
       var.value = 0;
 
@@ -862,19 +837,59 @@ static void check_variables(bool first_boot)
 #endif
           }
       }
+   }
 
-      //This needs to be on first boot only as it affects the screen_buf size, unless want to realloc
-      var.key = "desmume_hybrid_layout_scale";
+   var.key = "desmume_internal_resolution";
 
-      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      char *pch;
+      char str[100];
+      snprintf(str, sizeof(str), "%s", var.value);
+
+      pch = strtok(str, "x");
+      if (pch)
+         GPU_LR_FRAMEBUFFER_NATIVE_WIDTH = strtoul(pch, NULL, 0);
+      pch = strtok(NULL, "x");
+      if (pch)
+         GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT = strtoul(pch, NULL, 0);
+
+      switch (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH)
       {
-          if ((atoi(var.value)) != hybrid_layout_scale)
-          {
-              hybrid_layout_scale = atoi(var.value);
-              if (hybrid_layout_scale != 1 && hybrid_layout_scale != 3)
-                  hybrid_layout_scale = 1;
-          }
+         case 256:
+            scale = 1;
+            break;
+         case 512:
+            scale = 2;
+            break;
+         case 768:
+            scale = 3;
+            break;
+         case 1024:
+            scale = 4;
+            break;
+         case 1280:
+            scale = 5;
+            break;
+         case 1536:
+            scale = 6;
+            break;
+         case 1792:
+            scale = 7;
+            break;
+         case 2048:
+            scale = 8;
+            break;
+         case 2304:
+            scale = 9;
+            break;
+         case 2560:
+            scale = 10;
+            break;
       }
+
+      if (!first_boot)
+         GPU->SetCustomFramebufferSize (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT);
    }
 
    var.key = "desmume_num_cores";
@@ -930,6 +945,18 @@ static void check_variables(bool first_boot)
     }
     else
        quick_switch_enable = false;
+
+    var.key = "desmume_hybrid_layout_scale";
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        if ((atoi(var.value)) != hybrid_layout_scale)
+        {
+            hybrid_layout_scale = atoi(var.value);
+            if (hybrid_layout_scale != 1 && hybrid_layout_scale != 3)
+                hybrid_layout_scale = 1;
+        }
+    }
 
     var.key = "desmume_pointer_mouse";
 
@@ -1339,7 +1366,7 @@ void retro_set_environment(retro_environment_t cb)
 #if defined(IOS) || defined(ANDROID)
       { "desmume_cpu_mode", "CPU Mode; interpreter|jit" },
 #else
-      { "desmume_cpu_mode", "CPU Mode; jit|interpreter" },
+      { "desmume_cpu_mode", "CPU Mode (restart); jit|interpreter" },
 #endif
       { "desmume_jit_block_size", "JIT Block Size; 12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100|0|1|2|3|4|5|6|7|8|9|10|11" },
 #else
@@ -1347,7 +1374,7 @@ void retro_set_environment(retro_environment_t cb)
 #endif
       { "desmume_advanced_timing", "Enable Advanced Bus-Level Timing; enabled|disabled" },
       { "desmume_frameskip", "Frameskip; 0|1|2|3|4|5|6|7|8|9" },
-      { "desmume_internal_resolution", "Internal Resolution (restart); 256x192|512x384|768x576|1024x768|1280x960|1536x1152|1792x1344|2048x1536|2304x1728|2560x1920" },
+      { "desmume_internal_resolution", "Internal Resolution; 256x192|512x384|768x576|1024x768|1280x960|1536x1152|1792x1344|2048x1536|2304x1728|2560x1920" },
 #ifdef HAVE_OPENGL
       { "desmume_opengl_mode", "OpenGL Rasterizer (restart); disabled|enabled" },
       { "desmume_color_depth", "OpenGL: Color Depth (restart); 16-bit|32-bit"},
@@ -1362,7 +1389,7 @@ void retro_set_environment(retro_environment_t cb)
       { "desmume_gfx_texture_deposterize", "Texture Deposterization; disabled|enabled" },
       { "desmume_screens_layout", "Screen Layout; top/bottom|bottom/top|left/right|right/left|top only|bottom only|quick switch|hybrid/top|hybrid/bottom" },
       { "desmume_screens_gap", "Screen Gap; 0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100" },
-      { "desmume_hybrid_layout_scale", "Hybrid Layout: Scale (restart); 1|3"},
+      { "desmume_hybrid_layout_scale", "Hybrid Layout: Scale; 1|3"},
       { "desmume_hybrid_showboth_screens", "Hybrid Layout: Show Both Screens; enabled|disabled"},
       { "desmume_hybrid_cursor_always_smallscreen", "Hybrid Layout: Cursor Always on Small Screen; enabled|disabled"},
       { "desmume_pointer_mouse", "Mouse/Pointer; enabled|disabled" },
@@ -1531,7 +1558,7 @@ void retro_init (void)
     NDS_CreateDummyFirmware(&fw_config);
 
     NDS_3D_ChangeCore(GPU3D_SOFTRASTERIZER);
-    GPU->SetCustomFramebufferSize (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT);
+    GPU->SetCustomFramebufferSize(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT);
 
     log_cb(RETRO_LOG_INFO, "Setting %s color depth.\n", colorMode == RETRO_PIXEL_FORMAT_XRGB8888 ? "32-bit" : "16-bit");
     if(!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &colorMode))
@@ -1600,11 +1627,34 @@ void retro_run (void)
       struct retro_system_av_info new_av_info;
       retro_get_system_av_info(&new_av_info);
 
-      environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &new_av_info);
+      /* Reinitialize the video if the layout is significantly different than previously set.
+         This makes image uploads more efficient */
+      if (current_max_width != 0 &&
+          (current_max_width      < new_av_info.geometry.max_width  ||
+           current_max_height     < new_av_info.geometry.max_height ||
+           current_max_width / 2  > new_av_info.geometry.max_width  ||
+           current_max_height / 2 > new_av_info.geometry.max_height))
+      {
+         log_cb (RETRO_LOG_INFO, "Screen size changed significantly. Reinitializing.\n");
+         current_max_width = layout.width;
+         current_max_height = layout.height;
+         environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &new_av_info);
+      }
+      else
+      {
+         environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &new_av_info);
+      }
+   }
+
+   get_layout_params(current_layout, true, &layout);
+
+   if (current_max_width == 0)
+   {
+       current_max_width = layout.width;
+       current_max_height = layout.height;
    }
 
    poll_cb();
-   get_layout_params(current_layout, screen_buf, &layout);
 
    if(pointer_device_l != 0 || pointer_device_r != 0)  // 1=emulated pointer, 2=absolute pointer, 3=absolute pointer constantly pressed
    {
@@ -2258,8 +2308,6 @@ struct retro_input_descriptor desc[] = {
    }
 
    execute = true;
-
-   screen_buf = (uint16_t*)malloc((hybrid_layout_scale * (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH + NDS_MAX_SCREEN_GAP * scale)) * (hybrid_layout_scale * GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT) * 2 * bpp);
 
    return true;
 }
