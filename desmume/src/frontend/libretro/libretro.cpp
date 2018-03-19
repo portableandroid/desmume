@@ -1636,8 +1636,8 @@ void retro_run (void)
            current_max_height / 2 > new_av_info.geometry.max_height))
       {
          log_cb (RETRO_LOG_INFO, "Screen size changed significantly. Reinitializing.\n");
-         current_max_width = layout.width;
-         current_max_height = layout.height;
+         current_max_width = new_av_info.geometry.max_width;
+         current_max_height = new_av_info.geometry.max_height;;
          environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &new_av_info);
       }
       else
