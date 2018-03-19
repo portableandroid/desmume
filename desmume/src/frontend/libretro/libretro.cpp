@@ -525,6 +525,7 @@ static u8 *update_screen_buf_size(int bsize)
     {
         screen_buf = (u16 *) realloc(screen_buf, bsize);
         screen_buf_bsize = bsize;
+        memset(screen_buf, 0, bsize);
     }
 
     return (u8 *) screen_buf;
