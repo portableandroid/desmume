@@ -84,7 +84,6 @@ static int pointer_device_r = 0;
 static int analog_stick_deadzone;
 static int analog_stick_acceleration = 2048;
 static int analog_stick_acceleration_modifier = 0;
-static int microphone_force_enable = 0;
 static int nds_screen_gap = 0;
 static bool opengl_mode = false;
 static int hybrid_layout_scale = 1;
@@ -1157,23 +1156,11 @@ static void check_variables(bool first_boot)
    else
       CommonSettings.GFX3D_TXTHack = false;
 
-   var.key = "desmume_mic_force_enable";
-
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (!strcmp(var.value, "enabled"))
-         microphone_force_enable = 1;
-      else if(!strcmp(var.value, "disabled"))
-         microphone_force_enable = 0;
-   }
-   else
-      NDS_setMic(false);
-
    var.key = "desmume_mic_mode";
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
-      if (!strcmp(var.value, "internal"))
+      if (!strcmp(var.value, "pattern"))
          CommonSettings.micMode = TCommonSettings::InternalNoise;
       else if(!strcmp(var.value, "sample"))
          CommonSettings.micMode = TCommonSettings::Sample;
@@ -1404,8 +1391,7 @@ void retro_set_environment(retro_environment_t cb)
       { "desmume_pointer_device_acceleration_mod", "Emulated Pointer Acceleration Modifier Percent; 0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100" },
       { "desmume_pointer_stylus_pressure", "Emulated Stylus Pressure Modifier Percent; 50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100|0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|" },
       { "desmume_pointer_colour", "Pointer Colour; white|black|red|blue|yellow"},
-      { "desmume_mic_force_enable", "Force Microphone Enable; disabled|enabled" },
-      { "desmume_mic_mode", "Microphone Simulation Settings; internal|random" },
+      { "desmume_mic_mode", "Microphone Button Noise Type; pattern|random" },
       { 0, 0 }
    };
 
@@ -1949,15 +1935,10 @@ void retro_run (void)
          input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2) //Lid
          );
 
-   if (!microphone_force_enable)
-   {
-      if(input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3))
-         NDS_setMic(true);
-      else if(!input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3))
-         NDS_setMic(false);
-   }
-   else
+   if(input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3))
       NDS_setMic(true);
+   else if(!input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3))
+      NDS_setMic(false);
 
    // BUTTONS
    NDS_beginProcessingInput();
@@ -2292,7 +2273,7 @@ struct retro_input_descriptor desc[] = {
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,      "A" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,      "L" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2,     "Lid Close/Open" },
-      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3,     "Toggle Microphone" },
+      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3,     "Make Microphone Noise" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,      "R" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2,     "Tap Stylus" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3,     "Quick Screen Switch" },
