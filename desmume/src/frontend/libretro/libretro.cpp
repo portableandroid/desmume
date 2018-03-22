@@ -529,6 +529,7 @@ static void update_layout_screen_buffers(LayoutData *layout)
 
         screen_buf = (uint16_t *) malloc(layout->byte_size);
         screen_buf_byte_size = layout->byte_size;
+        memset(screen_buf, 0, screen_buf_byte_size);
     }
 
     layout->dst  = (uint16_t *)(((uint8_t *) screen_buf) + layout->offset1);
