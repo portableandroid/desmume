@@ -101,6 +101,7 @@ static uint32_t frameSkip;
 static uint32_t frameIndex;
 
 static uint16_t *screen_buf = NULL;
+static size_t screen_buf_byte_size = 0;
 
 extern GPUSubsystem *GPU;
 
@@ -131,6 +132,9 @@ struct LayoutData
    uint32_t width;
    uint32_t height;
    uint32_t pitch;
+   size_t offset1;
+   size_t offset2;
+   size_t byte_size;
    bool draw_screen1;
    bool draw_screen2;
 };
@@ -516,29 +520,30 @@ void retro_get_system_info(struct retro_system_info *info)
    info->block_extract = false;
 }
 
-static u8 *update_screen_buf_size(int bsize)
+static void update_layout_screen_buffers(LayoutData *layout)
 {
-    static int screen_buf_bsize = 0;
-
-    if (screen_buf_bsize != bsize)
+    if (screen_buf == NULL || screen_buf_byte_size != layout->byte_size)
     {
-        screen_buf = (u16 *) realloc(screen_buf, bsize);
-        screen_buf_bsize = bsize;
-        memset(screen_buf, 0, bsize);
+        if (screen_buf)
+            free(screen_buf);
+
+        screen_buf = (uint16_t *) malloc(layout->byte_size);
+        screen_buf_byte_size = layout->byte_size;
     }
 
-    return (u8 *) screen_buf;
+    layout->dst  = (uint16_t *)(((uint8_t *) screen_buf) + layout->offset1);
+    layout->dst2 = (uint16_t *)(((uint8_t *) screen_buf) + layout->offset2);
 }
 
-static void get_layout_params(unsigned id, bool update_ptrs, LayoutData *layout)
+static void update_layout_params(unsigned id, LayoutData *layout)
 {
    int awidth, bwidth;
 
    /* Helper variables */
-   int bytewidth = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * bpp;
+   int bytewidth  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * bpp;
    int byteheight = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
    int gapwidth   = gap_size() * bpp * scale;
-   int gapsize  = gap_size() * scale;
+   int gapsize    = gap_size() * scale;
 
    if (!layout)
       return;
@@ -555,13 +560,10 @@ static void get_layout_params(unsigned id, bool update_ptrs, LayoutData *layout)
          layout->draw_screen1  = true;
          layout->draw_screen2  = true;
 
-         if (update_ptrs)
-         {
-            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
-            layout->dst    = (uint16_t*) src;
-            layout->dst2   = (uint16_t*) (src + bytewidth * (byteheight + gapsize));
-         }
+         layout->offset1 = 0;
+         layout->offset2 = bytewidth * (byteheight + gapsize);
          break;
+
       case LAYOUT_BOTTOM_TOP:
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT * 2 + gapsize;
@@ -572,13 +574,10 @@ static void get_layout_params(unsigned id, bool update_ptrs, LayoutData *layout)
          layout->draw_screen1  = true;
          layout->draw_screen2  = true;
 
-         if (update_ptrs)
-         {
-            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
-            layout->dst   = (uint16_t*) (src + bytewidth * (byteheight + gapsize));
-            layout->dst2  = (uint16_t*) src;
-         }
+         layout->offset1 = bytewidth * (byteheight + gapsize);
+         layout->offset2 = 0;
          break;
+
       case LAYOUT_LEFT_RIGHT:
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * 2 + gapsize;
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
@@ -589,13 +588,9 @@ static void get_layout_params(unsigned id, bool update_ptrs, LayoutData *layout)
          layout->draw_screen1  = true;
          layout->draw_screen2  = true;
 
-         if (update_ptrs)
-         {
-            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
-            layout->dst    = (uint16_t*) src;
-            layout->dst2   = (uint16_t*) (src + bytewidth + gapwidth);
-         }
-         break;
+         layout->offset1 = 0;
+         layout->offset2 = bytewidth + gapwidth;
+
       case LAYOUT_RIGHT_LEFT:
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * 2 + gapsize;
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
@@ -606,13 +601,10 @@ static void get_layout_params(unsigned id, bool update_ptrs, LayoutData *layout)
          layout->draw_screen1  = true;
          layout->draw_screen2  = true;
 
-         if (update_ptrs)
-         {
-            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
-            layout->dst   = (uint16_t*) (src + bytewidth + gapwidth);
-            layout->dst2  = (uint16_t*) src;
-         }
+         layout->offset1 = bytewidth + gapwidth;
+         layout->offset2 = 0;
          break;
+
       case LAYOUT_HYBRID_TOP_ONLY:
       case LAYOUT_HYBRID_BOTTOM_ONLY:
          awidth = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / 3;
@@ -638,30 +630,28 @@ static void get_layout_params(unsigned id, bool update_ptrs, LayoutData *layout)
              layout->draw_screen2 = true;
          }
 
-         if (update_ptrs)
+         layout->offset1 = 0;
          {
-            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
-            layout->dst = (uint16_t*) src;
-
-            uint8_t *out = src; // Start pointer
+            size_t out = 0; // Start pointer
             out += bytewidth * hybrid_layout_scale; // Move pointer to right by large screen width
             int pitch = layout->pitch * bpp; // byte size of a line
             int halfscreen = layout->height / 2; // y offset: midpoint of the screen height
             halfscreen -= (gap_size() * scale * hybrid_layout_scale) / 2; // move upward by half the gap height
             halfscreen -= GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT * hybrid_layout_scale / 3; // move y offset framebuffer height upward
             out += pitch * halfscreen; // add this offset to pointer
-            layout->dst2 = (u16 *) out;
+            layout->offset2 = out;
+         }
 
-            if (id == LAYOUT_HYBRID_BOTTOM_ONLY)
-            {
-                uint16_t *swap;
-                swap = layout->dst;
-                layout->dst = layout->dst2;
-                layout->dst2 = swap;
-            }
+         if (id == LAYOUT_HYBRID_BOTTOM_ONLY)
+         {
+             size_t swap;
+             swap = layout->offset1;
+             layout->offset1 = layout->offset2;
+             layout->offset2 = swap;
          }
 
          break;
+
       case LAYOUT_TOP_ONLY:
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
@@ -670,14 +660,12 @@ static void get_layout_params(unsigned id, bool update_ptrs, LayoutData *layout)
          layout->touch_y= GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
 
          layout->draw_screen1 = true;
+         layout->draw_screen2 = false;
 
-         if (update_ptrs)
-         {
-            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
-            layout->dst    = (uint16_t*) src;
-            layout->dst2   = (uint16_t*) (src + bytewidth * byteheight);
-         }
+         layout->offset1 = 0;
+         layout->offset2 = bytewidth * byteheight;
          break;
+
       case LAYOUT_BOTTOM_ONLY:
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
@@ -686,21 +674,21 @@ static void get_layout_params(unsigned id, bool update_ptrs, LayoutData *layout)
          layout->touch_y= GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
 
          layout->draw_screen2 = true;
+         layout->draw_screen1 = false;
 
-         if (update_ptrs)
-         {
-            u8 *src = update_screen_buf_size (layout->width * layout->height * bpp);
-            layout->dst    = (uint16_t*) (src + bytewidth * byteheight);
-            layout->dst2   = (uint16_t*) src;
-         }
+         layout->offset1 = bytewidth * byteheight;
+         layout->offset2 = 0;
+
          break;
    }
+
+   layout->byte_size = layout->width * layout->height * bpp;
 }
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
    struct LayoutData layout;
-   get_layout_params(current_layout, false, &layout);
+   update_layout_params(current_layout, &layout);
 
    info->geometry.base_width   = layout.width;
    info->geometry.base_height  = layout.height;
@@ -725,7 +713,7 @@ static void check_variables(bool first_boot)
     struct retro_variable var = {0};
 
    if (first_boot)
-   { 
+   {
       var.key = "desmume_cpu_mode";
       var.value = 0;
 
@@ -909,7 +897,6 @@ static void check_variables(bool first_boot)
        unsigned new_layout_id        = 0;
 
        quick_switch_enable = false;
-
 
        if (!strcmp(var.value, "top/bottom"))
           new_layout_id = LAYOUT_TOP_BOTTOM;
@@ -1626,7 +1613,7 @@ void retro_run (void)
       {
          log_cb (RETRO_LOG_INFO, "Screen size changed significantly. Reinitializing.\n");
          current_max_width = new_av_info.geometry.max_width;
-         current_max_height = new_av_info.geometry.max_height;;
+         current_max_height = new_av_info.geometry.max_height;
          environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &new_av_info);
       }
       else
@@ -1635,7 +1622,8 @@ void retro_run (void)
       }
    }
 
-   get_layout_params(current_layout, true, &layout);
+   update_layout_params(current_layout, &layout);
+   update_layout_screen_buffers(&layout);
 
    if (current_max_width == 0)
    {
@@ -2330,7 +2318,7 @@ void *retro_get_memory_data(unsigned type)
 size_t retro_get_memory_size(unsigned type)
 {
    if (type == RETRO_MEMORY_SYSTEM_RAM)
-      return CommonSettings.ConsoleType == NDS_CONSOLE_TYPE_DSI ? 
+      return CommonSettings.ConsoleType == NDS_CONSOLE_TYPE_DSI ?
          0x1000000 : 0x0400000;
    else
       return 0;
