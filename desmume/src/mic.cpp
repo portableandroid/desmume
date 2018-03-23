@@ -26,7 +26,7 @@
 #include "readwrite.h"
 #include "emufile.h"
 
-#define MIC_NULL_SAMPLE_VALUE 0
+#define MIC_NULL_SAMPLE_VALUE 0x40
 #define MIC_MAX_BUFFER_SAMPLES 320
 #define MIC_BUFFER_SIZE (sizeof(u8) * MIC_MAX_BUFFER_SAMPLES)
 #define NUM_INTERNAL_NOISE_SAMPLES 32
