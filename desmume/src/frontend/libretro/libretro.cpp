@@ -591,6 +591,7 @@ static void update_layout_params(unsigned id, LayoutData *layout)
 
          layout->offset1 = 0;
          layout->offset2 = bytewidth + gapwidth;
+         break;
 
       case LAYOUT_RIGHT_LEFT:
          layout->width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * 2 + gapsize;
