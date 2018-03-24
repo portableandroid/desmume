@@ -95,6 +95,7 @@ static uint32_t pointer_color_32 = 0xFFFFFFFF;
 static int bpp = 2;
 static int current_max_width = 0;
 static int current_max_height = 0;
+static int input_rotation = 0;
 
 static retro_pixel_format colorMode = RETRO_PIXEL_FORMAT_RGB565;
 static uint32_t frameSkip;
@@ -1014,6 +1015,15 @@ static void check_variables(bool first_boot)
     else
         mouse_speed = 1.0f;
 
+    var.key = "desmume_input_rotation";
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        input_rotation = atoi(var.value);
+    }
+    else
+        input_rotation = 0;
+
     var.key = "desmume_frameskip";
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -1373,7 +1383,8 @@ void retro_set_environment(retro_environment_t cb)
       { "desmume_hybrid_cursor_always_smallscreen", "Hybrid Layout: Cursor Always on Small Screen; enabled|disabled"},
       { "desmume_pointer_mouse", "Mouse/Pointer; enabled|disabled" },
       { "desmume_pointer_type", "Pointer Type; mouse|touch" },
-      { "desmume_mouse_speed", "Mouse Speed; 1.0|1.5|2.0|0.125|0.25|0.5"},
+      { "desmume_mouse_speed", "Mouse Speed; 1.0|1.5|2.0|0.125|0.25|0.5" },
+      { "desmume_input_rotation", "Pointer Rotation; 0|90|180|270" },
       { "desmume_pointer_device_l", "Pointer Mode for Left Analog; none|emulated|absolute|pressed" },
       { "desmume_pointer_device_r", "Pointer Mode for Right Analog; none|emulated|absolute|pressed" },
       { "desmume_pointer_device_deadzone", "Emulated Pointer Deadzone Percent; 15|20|25|30|35|0|5|10" },
@@ -1584,6 +1595,31 @@ void retro_reset (void)
     NDS_Reset();
 }
 
+void rotate_input(int16_t &x, int16_t &y, int rotation)
+{
+    uint16_t tmp;
+
+    switch (rotation)
+    {
+       case 270:
+          tmp = x;
+          x = y;
+          y = -x;
+          break;
+       case 180:
+          x = -x;
+          y = -y;
+          break;
+       case 90:
+          tmp = x;
+          x = -y;
+          y = tmp;
+          break;
+       default:
+          break;
+    }
+}
+
 void retro_run (void)
 {
    struct LayoutData layout;
@@ -1658,8 +1694,10 @@ void retro_run (void)
             {
                 analogX_l = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X) /  final_acceleration;
                 analogY_l = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y) / final_acceleration;
+                rotate_input(analogX_l, analogY_l, input_rotation);
                 analogX_r = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X) /  final_acceleration;
                 analogY_r = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y) / final_acceleration;
+                rotate_input(analogX_r, analogY_r, input_rotation);
 
                 double radius_l = sqrt(analogX_l * analogX_l + analogY_l * analogY_l);
                 double radius_r = sqrt(analogX_r * analogX_r + analogY_r * analogY_r);
@@ -1684,6 +1722,7 @@ void retro_run (void)
             {
                 analogX = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X) / final_acceleration;
                 analogY = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y) / final_acceleration;
+                rotate_input(analogX, analogY, input_rotation);
                 radius = sqrt(analogX * analogX + analogY * analogY);
                 angle = atan2(analogY, analogX);
             }
@@ -1691,6 +1730,7 @@ void retro_run (void)
             {
                 analogX = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X) / final_acceleration;
                 analogY = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y) / final_acceleration;
+                rotate_input(analogX, analogY, input_rotation);
                 radius = sqrt(analogX * analogX + analogY * analogY);
                 angle = atan2(analogY, analogX);
             }
@@ -1727,6 +1767,7 @@ void retro_run (void)
                 {
                     int16_t analogXpress = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
                     int16_t analogYpress = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y);
+                    rotate_input(analogXpress, analogYpress, input_rotation);
 
                     double radius = sqrt(analogXpress * analogXpress + analogYpress * analogYpress);
 
@@ -1744,6 +1785,7 @@ void retro_run (void)
                     {
                         analogX = sqrt(2)*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/2*input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X) / (float)0x8000;
                         analogY = sqrt(2)*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/2*input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y) / (float)0x8000;
+                        rotate_input(analogX, analogY, input_rotation);
                     }
                 }
 
@@ -1751,6 +1793,7 @@ void retro_run (void)
                 {
                     int16_t analogXpress = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X);
                     int16_t analogYpress = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y);
+                    rotate_input(analogXpress, analogYpress, input_rotation);
 
                     double radius = sqrt(analogXpress * analogXpress + analogYpress * analogYpress);
 
@@ -1765,6 +1808,7 @@ void retro_run (void)
                     {
                         analogX = sqrt(2)*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/2*input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X) / (float)0x8000;
                         analogY = sqrt(2)*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/2*input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y) / (float)0x8000;
+                        rotate_input(analogX, analogY, input_rotation);
                     }
 
                 }
@@ -1772,6 +1816,7 @@ void retro_run (void)
                 {
                     analogX = sqrt(2)*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/2*input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X) / (float)0x8000;
                     analogY = sqrt(2)*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/2*input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y) / (float)0x8000;
+                    rotate_input(analogX, analogY, input_rotation);
                 }
 
                 //set absolute analog position offset to center of screen
@@ -1785,6 +1830,7 @@ void retro_run (void)
                 {
                     analogX = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
                     analogY = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y);
+                    rotate_input(analogX, analogY, input_rotation);
                     analogX = sqrt(2)*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/2*analogX / (float)0x8000;
                     analogY = sqrt(2)*GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT/2*analogY / (float)0x8000;
 
@@ -1797,6 +1843,7 @@ void retro_run (void)
                 {
                     int16_t analogXpress = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
                     int16_t analogYpress = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y);
+                    rotate_input(analogXpress, analogYpress, input_rotation);
                     double radius = sqrt(analogXpress * analogXpress + analogYpress * analogYpress);
                     if (radius > (float)analog_stick_deadzone*(float)0x8000/100)
                     {
@@ -1816,6 +1863,7 @@ void retro_run (void)
                 {
                     analogX = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X);
                     analogY = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y);
+                    rotate_input(analogX, analogY, input_rotation);
                     analogX = sqrt(2)*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/2*analogX / (float)0x8000;
                     analogY = sqrt(2)*GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT/2*analogY / (float)0x8000;
 
@@ -1827,6 +1875,7 @@ void retro_run (void)
                 {
                     int16_t analogXpress = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X);
                     int16_t analogYpress = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y);
+                    rotate_input(analogXpress, analogYpress, input_rotation);
                     double radius = sqrt(analogXpress * analogXpress + analogYpress * analogYpress);
                     if (radius > (float)analog_stick_deadzone*(float)0x8000/100)
                     {
@@ -1858,6 +1907,7 @@ void retro_run (void)
       {
          int16_t mouseX = input_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
          int16_t mouseY = input_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
+         rotate_input(mouseX, mouseY, input_rotation);
          have_touch           = have_touch || input_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
 
          mouse_x_delta += mouseX * mouse_speed;
