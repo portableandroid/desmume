@@ -1604,7 +1604,7 @@ void rotate_input(int16_t &x, int16_t &y, int rotation)
        case 270:
           tmp = x;
           x = y;
-          y = -x;
+          y = -tmp;
           break;
        case 180:
           x = -x;
