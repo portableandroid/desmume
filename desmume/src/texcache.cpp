@@ -1163,11 +1163,11 @@ void NDSTextureUnpack4x4(const size_t srcSize, const u32 *__restrict srcData, co
 	//i am guessing we just generate black in that case
 	bool dead = false;
 	
-	for (size_t y = 0, d = 0; y < yTmpSize; y++)
+	for (u32 y = 0, d = 0; y < yTmpSize; y++)
 	{
 		u32 tmpPos[4]={(y<<2)*sizeX,((y<<2)+1)*sizeX,
 			((y<<2)+2)*sizeX,((y<<2)+3)*sizeX};
-		for (size_t x = 0; x < xTmpSize; x++, d++)
+		for (u32 x = 0; x < xTmpSize; x++, d++)
 		{
 			if (d >= limit)
 				dead = true;
