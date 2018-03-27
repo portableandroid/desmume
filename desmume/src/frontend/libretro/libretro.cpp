@@ -557,7 +557,7 @@ static void update_layout_params(unsigned id, LayoutData *layout)
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT * 2 + gapsize;
          layout->pitch  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
          layout->touch_x= 0;
-         layout->touch_y= GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
+         layout->touch_y= GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT + gapsize;
 
          layout->draw_screen1  = true;
          layout->draw_screen2  = true;
@@ -571,7 +571,7 @@ static void update_layout_params(unsigned id, LayoutData *layout)
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT * 2 + gapsize;
          layout->pitch  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
          layout->touch_x= 0;
-         layout->touch_y= GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
+         layout->touch_y= 0;
 
          layout->draw_screen1  = true;
          layout->draw_screen2  = true;
@@ -619,15 +619,15 @@ static void update_layout_params(unsigned id, LayoutData *layout)
 
          if (id == LAYOUT_HYBRID_TOP_ONLY)
          {
-            layout->touch_x = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
-            layout->touch_y = 0;
+            layout->touch_x = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * hybrid_layout_scale;
+            layout->touch_y = (GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT + gapsize) * hybrid_layout_scale / 2;
             layout->draw_screen1 = true;
             layout->draw_screen2 = false;
          }
          else
          {
              layout->touch_x = 0;
-             layout->touch_y = hybrid_layout_scale * GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
+             layout->touch_y = 0;
 
              layout->draw_screen1 = false;
              layout->draw_screen2 = true;
@@ -674,7 +674,7 @@ static void update_layout_params(unsigned id, LayoutData *layout)
          layout->height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
          layout->pitch  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
          layout->touch_x= 0;
-         layout->touch_y= GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
+         layout->touch_y= 0;
 
          layout->draw_screen2 = true;
          layout->draw_screen1 = false;
@@ -1383,7 +1383,7 @@ void retro_set_environment(retro_environment_t cb)
       { "desmume_hybrid_cursor_always_smallscreen", "Hybrid Layout: Cursor Always on Small Screen; enabled|disabled"},
       { "desmume_pointer_mouse", "Mouse/Pointer; enabled|disabled" },
       { "desmume_pointer_type", "Pointer Type; mouse|touch" },
-      { "desmume_mouse_speed", "Mouse Speed; 1.0|1.5|2.0|0.125|0.25|0.5" },
+      { "desmume_mouse_speed", "Mouse Speed; 1.0|1.5|2.0|0.01|0.02|0.03|0.04|0.05|0.125|0.25|0.5" },
       { "desmume_input_rotation", "Pointer Rotation; 0|90|180|270" },
       { "desmume_pointer_device_l", "Pointer Mode for Left Analog; none|emulated|absolute|pressed" },
       { "desmume_pointer_device_r", "Pointer Mode for Right Analog; none|emulated|absolute|pressed" },
@@ -1925,14 +1925,33 @@ void retro_run (void)
       // TOUCH: Pointer
       else if(input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED))
       {
-         const float X_FACTOR = ((float)layout.width / 65536.0f);
-         const float Y_FACTOR = ((float)layout.height / 65536.0f);
+         int touch_area_width = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
+         int touch_area_height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
 
-         float x = (input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X) + 32768.0f) * X_FACTOR;
-         float y = (input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y) + 32768.0f) * Y_FACTOR;
+         int16_t mouseX = input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X);
+         int16_t mouseY = input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y);
+         rotate_input(mouseX, mouseY, input_rotation);
 
-         if ((x >= layout.touch_x) && (x < layout.touch_x + GPU_LR_FRAMEBUFFER_NATIVE_WIDTH) &&
-               (y >= layout.touch_y) && (y < layout.touch_y + GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT))
+         int x = ((int) mouseX + 0x8000) * layout.width / 0x10000;
+         int y = ((int) mouseY + 0x8000) * layout.height / 0x10000;
+
+         if (hybrid_layout_scale == 3 && current_layout == LAYOUT_HYBRID_BOTTOM_ONLY && !hybrid_cursor_always_smallscreen)
+         {
+             /* Hybrid: We're on the big screen at triple scale, so triple the size */
+             touch_area_width *= 3;
+             touch_area_height *= 3;
+         }
+         else if ((hybrid_layout_scale == 1)
+                  && ((current_layout == LAYOUT_HYBRID_TOP_ONLY)  ||
+                      (current_layout == LAYOUT_HYBRID_BOTTOM_ONLY && hybrid_cursor_always_smallscreen && hybrid_layout_showbothscreens)))
+         {
+             /* Hybrid: We're on the small screen at hybrid scale 1, so 1/3 the size */
+             touch_area_width /= 3;
+             touch_area_height /= 3;
+         }
+
+         if ((x >= layout.touch_x) && (x < layout.touch_x + touch_area_width) &&
+               (y >= layout.touch_y) && (y < layout.touch_y + touch_area_height))
          {
             have_touch = true;
 
@@ -1944,19 +1963,20 @@ void retro_run (void)
 
    if(have_touch)
    {
-	   //Hybrid layout requires "rescaling" of coordinates. No idea how this works on actual touch screen - tested on PC with mousepad and emulated gamepad
-	if(current_layout == LAYOUT_HYBRID_TOP_ONLY || (current_layout == LAYOUT_HYBRID_BOTTOM_ONLY))
-	{
-		if( (current_layout == LAYOUT_HYBRID_BOTTOM_ONLY) && hybrid_layout_scale == 1 && ( !hybrid_cursor_always_smallscreen || !hybrid_layout_showbothscreens))
-			NDS_setTouchPos(TouchX / scale, TouchY / scale);
-		else
-			NDS_setTouchPos(TouchX*3/hybrid_layout_scale / scale, TouchY*3/hybrid_layout_scale / scale);
-	}
-	else
-		NDS_setTouchPos(TouchX / scale, TouchY / scale);
+       //Hybrid layout requires "rescaling" of coordinates. No idea how this works on actual touch screen - tested on PC with mousepad and emulated gamepad
+       if(current_layout == LAYOUT_HYBRID_TOP_ONLY || (current_layout == LAYOUT_HYBRID_BOTTOM_ONLY))
+       {
+           if (((current_layout == LAYOUT_HYBRID_TOP_ONLY)  ||
+                (current_layout == LAYOUT_HYBRID_BOTTOM_ONLY && hybrid_cursor_always_smallscreen && hybrid_layout_showbothscreens)))
+               NDS_setTouchPos(TouchX * 3 / hybrid_layout_scale / scale, TouchY * 3 / hybrid_layout_scale / scale);
+           else
+               NDS_setTouchPos(TouchX / hybrid_layout_scale / scale, TouchY / hybrid_layout_scale / scale);
+       }
+       else
+           NDS_setTouchPos(TouchX / scale, TouchY / scale);
    }
    else
-      NDS_releaseTouch();
+       NDS_releaseTouch();
 
    NDS_setPad(
          input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT),
