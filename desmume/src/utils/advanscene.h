@@ -16,6 +16,7 @@
 */
 
 #include <string>
+include <time.h>
 #include "../types.h"
 
 class EMUFILE;
