@@ -221,56 +221,59 @@ static void DrawPointer(uint16_t* aOut, uint32_t aPitchInPix)
 
 static void DrawPointerHybrid(uint16_t* aOut, uint32_t aPitchInPix, bool large)
 {
-   if(FramesWithPointer-- < 0)
-      return;
+    unsigned height,width;
+    unsigned DrawX, DrawY;
+    int factor;
 
-	unsigned height,width;
-	unsigned DrawX, DrawY;
-   if(!large)
-   {
-	aOut += bpp / 2 * hybrid_layout_scale*(GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT/3 + gap_size() * scale)*hybrid_layout_scale*(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH + GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/3);
-	height = hybrid_layout_scale*GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT/3;
-	int awidth = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH/3;
-		width = hybrid_layout_scale*awidth;
-		DrawX = Saturate(0, (width-1), TouchX);
-		DrawY = Saturate(0, (height-1), TouchY);
-   }
-   else{
-	   height = hybrid_layout_scale*GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
-		width = hybrid_layout_scale*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
-		DrawX = Saturate(0, (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH-1), TouchX);
-		DrawY = Saturate(0, (GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT-1), TouchY);
-   }
-   int factor;
-   if(large)
-   {
-	   factor = 5*hybrid_layout_scale;
-	   if(hybrid_layout_scale == 3)
-	   {
-		   DrawX = 3*DrawX;
-		   DrawY = 3*DrawY;
-	   }
-   }
-   else if(hybrid_layout_scale == 3)
-	   factor = 6;
-   else
-	   factor = 3;
+    if (FramesWithPointer-- < 0)
+        return;
 
-   if (colorMode != RETRO_PIXEL_FORMAT_XRGB8888)
-   {
-       if (DrawX >   (factor * scale)) DrawPointerLineSmall(&aOut[DrawY * aPitchInPix + DrawX - (factor * scale) ], 1, factor);
-       if (DrawX < (width - (factor * scale) )) DrawPointerLineSmall(&aOut[DrawY * aPitchInPix + DrawX + 1], 1, factor);
-       if (DrawY >   (factor * scale)) DrawPointerLineSmall(&aOut[(DrawY - (factor * scale) ) * aPitchInPix + DrawX], aPitchInPix, factor);
-       if (DrawY < (height-(factor * scale) )) DrawPointerLineSmall(&aOut[(DrawY + 1) * aPitchInPix + DrawX], aPitchInPix, factor);
-   }
-   else
-   {
-       uint32_t *aOut_32 = (uint32_t *) aOut;
-       if (DrawX >   (factor * scale)) DrawPointerLineSmall_32(&aOut_32[DrawY * aPitchInPix + DrawX - (factor * scale) ], 1, factor);
-       if (DrawX < (width - (factor * scale) )) DrawPointerLineSmall_32(&aOut_32[DrawY * aPitchInPix + DrawX + 1], 1, factor);
-       if (DrawY >   (factor * scale)) DrawPointerLineSmall_32(&aOut_32[(DrawY - (factor * scale) ) * aPitchInPix + DrawX], aPitchInPix, factor);
-       if (DrawY < (height-(factor * scale) )) DrawPointerLineSmall_32(&aOut_32[(DrawY + 1) * aPitchInPix + DrawX], aPitchInPix, factor);
-   }
+    if (!large)
+    {
+        aOut += aPitchInPix * hybrid_layout_scale * bpp / 2 * (GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT / 3 + gap_size() * scale);
+        width  = GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * hybrid_layout_scale / 3;
+        height = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT * hybrid_layout_scale / 3;
+
+        DrawX = Saturate(0, (width-1), TouchX * hybrid_layout_scale / 3);
+        DrawY = Saturate(0, (height-1), TouchY * hybrid_layout_scale / 3);
+    }
+    else
+    {
+        height = hybrid_layout_scale*GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT;
+        width = hybrid_layout_scale*GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
+        DrawX = Saturate(0, (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH-1), TouchX);
+        DrawY = Saturate(0, (GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT-1), TouchY);
+    }
+
+    if(large)
+    {
+        factor = 5*hybrid_layout_scale;
+        if(hybrid_layout_scale == 3)
+        {
+            DrawX = 3*DrawX;
+            DrawY = 3*DrawY;
+        }
+    }
+    else if(hybrid_layout_scale == 3)
+        factor = 6;
+    else
+        factor = 3;
+
+    if (colorMode != RETRO_PIXEL_FORMAT_XRGB8888)
+    {
+        if (DrawX >   (factor * scale)) DrawPointerLineSmall(&aOut[DrawY * aPitchInPix + DrawX - (factor * scale) ], 1, factor);
+        if (DrawX < (width - (factor * scale) )) DrawPointerLineSmall(&aOut[DrawY * aPitchInPix + DrawX + 1], 1, factor);
+        if (DrawY >   (factor * scale)) DrawPointerLineSmall(&aOut[(DrawY - (factor * scale) ) * aPitchInPix + DrawX], aPitchInPix, factor);
+        if (DrawY < (height-(factor * scale) )) DrawPointerLineSmall(&aOut[(DrawY + 1) * aPitchInPix + DrawX], aPitchInPix, factor);
+    }
+    else
+    {
+        uint32_t *aOut_32 = (uint32_t *) aOut;
+        if (DrawX >   (factor * scale)) DrawPointerLineSmall_32(&aOut_32[DrawY * aPitchInPix + DrawX - (factor * scale) ], 1, factor);
+        if (DrawX < (width - (factor * scale) )) DrawPointerLineSmall_32(&aOut_32[DrawY * aPitchInPix + DrawX + 1], 1, factor);
+        if (DrawY >   (factor * scale)) DrawPointerLineSmall_32(&aOut_32[(DrawY - (factor * scale) ) * aPitchInPix + DrawX], aPitchInPix, factor);
+        if (DrawY < (height-(factor * scale) )) DrawPointerLineSmall_32(&aOut_32[(DrawY + 1) * aPitchInPix + DrawX], aPitchInPix, factor);
+    }
 }
 
 static bool NDS_3D_ChangeCore(int newCore)
@@ -1955,28 +1958,18 @@ void retro_run (void)
          {
             have_touch = true;
 
-            TouchX = x - layout.touch_x;
-            TouchY = y - layout.touch_y;
+            TouchX = (x - layout.touch_x) * GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / touch_area_width;
+            TouchY = (y - layout.touch_y) * GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT / touch_area_height;
          }
       }
    }
 
    if(have_touch)
    {
-       //Hybrid layout requires "rescaling" of coordinates. No idea how this works on actual touch screen - tested on PC with mousepad and emulated gamepad
-       if(current_layout == LAYOUT_HYBRID_TOP_ONLY || (current_layout == LAYOUT_HYBRID_BOTTOM_ONLY))
-       {
-           if (((current_layout == LAYOUT_HYBRID_TOP_ONLY)  ||
-                (current_layout == LAYOUT_HYBRID_BOTTOM_ONLY && hybrid_cursor_always_smallscreen && hybrid_layout_showbothscreens)))
-               NDS_setTouchPos(TouchX * 3 / hybrid_layout_scale / scale, TouchY * 3 / hybrid_layout_scale / scale);
-           else
-               NDS_setTouchPos(TouchX / hybrid_layout_scale / scale, TouchY / hybrid_layout_scale / scale);
-       }
-       else
-           NDS_setTouchPos(TouchX / scale, TouchY / scale);
+      NDS_setTouchPos(TouchX / scale, TouchY / scale);
    }
    else
-       NDS_releaseTouch();
+      NDS_releaseTouch();
 
    NDS_setPad(
          input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT),
