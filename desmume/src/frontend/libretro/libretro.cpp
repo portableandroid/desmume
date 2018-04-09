@@ -716,7 +716,8 @@ static void MicrophoneToggle(void)
 
 static void check_variables(bool first_boot)
 {
-    struct retro_variable var = {0};
+   struct retro_variable var = {0};
+   bool need_framebuffer_reset = false;
 
    if (first_boot)
    {
@@ -883,9 +884,8 @@ static void check_variables(bool first_boot)
       }
 
       if (!first_boot && GPU->GetCustomFramebufferWidth() != GPU_LR_FRAMEBUFFER_NATIVE_WIDTH)
-      {
-         GPU->SetCustomFramebufferSize (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT);
-      }
+         need_framebuffer_reset = true;
+
    }
 
    var.key = "desmume_num_cores";
@@ -1082,8 +1082,14 @@ static void check_variables(bool first_boot)
          CommonSettings.GFX3D_Renderer_Multisample = false;
       else
       {
+         int newvalue = atoi(var.value);
          CommonSettings.GFX3D_Renderer_Multisample = true;
-         multisample_level = atoi(var.value);
+
+         if (newvalue != multisample_level && !first_boot)
+         {
+            need_framebuffer_reset = true;
+         }
+         multisample_level = newvalue;
       }
    }
    else
@@ -1288,6 +1294,9 @@ static void check_variables(bool first_boot)
        pointer_colour = 0xFFFF;
        pointer_color_32 = 0xFFFFFFFF;
    }
+
+   if (need_framebuffer_reset)
+      GPU->SetCustomFramebufferSize(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT);
 }
 
 #define GPU3D_NULL           0
@@ -1370,7 +1379,7 @@ void retro_set_environment(retro_environment_t cb)
 #ifdef HAVE_OPENGL
       { "desmume_opengl_mode", "OpenGL Rasterizer (restart); disabled|enabled" },
       { "desmume_color_depth", "OpenGL: Color Depth (restart); 16-bit|32-bit"},
-      { "desmume_gfx_multisampling", "OpenGL: Multisampling (restart); disabled|2|4|8|16|32" },
+      { "desmume_gfx_multisampling", "OpenGL: Multisampling AA; disabled|2|4|8|16|32" },
       { "desmume_gfx_texture_smoothing", "OpenGL: Texture Smoothing; disabled|enabled" },
 #endif
       { "desmume_gfx_highres_interpolate_color", "Soft3D: High-res Color Interpolation; disabled|enabled" },
