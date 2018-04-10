@@ -495,7 +495,7 @@ static void SwapScreenSmall(uint16_t *dst, const uint16_t *src, uint32_t pitch, 
             dst += GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
         }
     }
-    else
+    else if (draw)
     {
         conv_0rgb1555_rb_swapped_rgb565(dst,
                                         src,
@@ -1296,7 +1296,9 @@ static void check_variables(bool first_boot)
    }
 
    if (need_framebuffer_reset)
+   {
       GPU->SetCustomFramebufferSize(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT);
+   }
 }
 
 #define GPU3D_NULL           0
@@ -2071,12 +2073,16 @@ void retro_run (void)
 
    static int previous_layout = LAYOUTS_MAX;
    static int previous_screen_gap = 0;
+   static int previous_showbothscreens = true;
 
-   if (previous_layout != current_layout || previous_screen_gap != nds_screen_gap)
+   if (previous_layout          != current_layout ||
+       previous_screen_gap      != nds_screen_gap ||
+       previous_showbothscreens != hybrid_layout_showbothscreens)
    {
           memset (screen_buf, 0, layout.width * layout.height * bpp);
           previous_layout = current_layout;
           previous_screen_gap = nds_screen_gap;
+          previous_showbothscreens = hybrid_layout_showbothscreens;
    }
 
    if (!skipped)
