@@ -2037,6 +2037,10 @@ Render3DError OpenGLRenderer_3_2::SetFramebufferSize(size_t w, size_t h)
 	if (this->isMultisampledFBOSupported)
 	{
 		GLsizei sampleSize = this->GetLimitedMultisampleSize();
+#ifdef __LIBRETRO__
+		extern int multisample_level;
+		sampleSize = multisample_level;
+#endif
 		
 		if (this->willUsePerSampleZeroDstPass)
 		{

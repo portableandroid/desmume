@@ -1502,14 +1502,13 @@ GLsizei OpenGLRenderer::GetLimitedMultisampleSize() const
 		maxMultisamples = OGLMaxMultisamples_Tier4;
 	}
 
-#if defined(__LIBRETRO__)
-	maxMultisamples = multisample_level;
-#endif
-
 	if (deviceMultisamples > maxMultisamples)
 	{
 		deviceMultisamples = maxMultisamples;
 	}
+#ifdef __LIBRETRO__
+	deviceMultisamples = this->_deviceInfo.maxSamples;
+#endif
 	
 	return deviceMultisamples;
 }
@@ -4882,6 +4881,10 @@ Render3DError OpenGLRenderer_1_2::SetFramebufferSize(size_t w, size_t h)
 	if (this->isMultisampledFBOSupported)
 	{
 		GLsizei sampleSize = this->GetLimitedMultisampleSize();
+#ifdef __LIBRETRO__
+		extern int multisample_level;
+		sampleSize = multisample_level;
+#endif
 		
 		glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, OGLRef.rboMSGColorID);
 		glRenderbufferStorageMultisampleEXT(GL_RENDERBUFFER_EXT, sampleSize, GL_RGBA, w, h);

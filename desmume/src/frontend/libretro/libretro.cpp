@@ -90,7 +90,7 @@ static int hybrid_layout_scale = 1;
 static bool hybrid_layout_showbothscreens = true;
 static bool hybrid_cursor_always_smallscreen = true;
 static uint16_t pointer_colour = 0xFFFF;
-int multisample_level;
+int multisample_level = 1;
 static uint32_t pointer_color_32 = 0xFFFFFFFF;
 static int bpp = 2;
 static int current_max_width = 0;
@@ -1065,7 +1065,10 @@ static void check_variables(bool first_boot)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       if (!strcmp(var.value, "disabled"))
+      {
          CommonSettings.GFX3D_Renderer_Multisample = false;
+         multisample_level = 1;
+      }
       else
       {
          int newvalue = atoi(var.value);
