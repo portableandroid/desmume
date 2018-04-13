@@ -405,6 +405,9 @@ static void SwapScreenSmall_32(uint32_t *dst, const uint32_t *src, uint32_t pitc
 {
     unsigned x, y;
 
+    if (!draw)
+        return;
+
     if(!first)
     {
         int screenheight = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT * hybrid_layout_scale / 3;
@@ -418,16 +421,9 @@ static void SwapScreenSmall_32(uint32_t *dst, const uint32_t *src, uint32_t pitc
         //Shrink to 1/3 the width and 1/3 the height
         for(y = 0; y < GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT / 3; y++)
         {
-            if (draw)
+            for(x = 0; x < GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / 3; x++)
             {
-                for(x = 0; x < GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / 3; x++)
-                {
-                    *dst++ = src[3 * (y * GPU_LR_FRAMEBUFFER_NATIVE_WIDTH + x)];
-                }
-            }
-            else
-            {
-                dst += GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / 3;
+                *dst++ = src[3 * (y * GPU_LR_FRAMEBUFFER_NATIVE_WIDTH + x)];
             }
             dst += GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
         }
@@ -440,7 +436,6 @@ static void SwapScreenSmall_32(uint32_t *dst, const uint32_t *src, uint32_t pitc
             {
                 memcpy (dst, src + y * GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, (pitch - GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * 3) * 4);
             }
-
             dst += pitch;
         }
     }
@@ -468,6 +463,9 @@ static void SwapScreenSmall(uint16_t *dst, const uint16_t *src, uint32_t pitch, 
 {
     unsigned x, y;
 
+    if (!draw)
+        return;
+
     if(!first)
     {
         int screenheight = GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT * hybrid_layout_scale / 3;
@@ -481,21 +479,14 @@ static void SwapScreenSmall(uint16_t *dst, const uint16_t *src, uint32_t pitch, 
         //Shrink to 1/3 the width and 1/3 the height
         for(y = 0; y < GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT / 3; y++)
         {
-            if (draw)
+            for(x = 0; x < GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / 3; x++)
             {
-                for(x = 0; x < GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / 3; x++)
-                {
-                    *dst++ = CONVERT_COLOR(src[3 * (y * GPU_LR_FRAMEBUFFER_NATIVE_WIDTH + x)]);
-                }
-            }
-            else
-            {
-                dst += GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / 3;
+                *dst++ = CONVERT_COLOR(src[3 * (y * GPU_LR_FRAMEBUFFER_NATIVE_WIDTH + x)]);
             }
             dst += GPU_LR_FRAMEBUFFER_NATIVE_WIDTH;
         }
     }
-    else if (draw)
+    else
     {
         conv_0rgb1555_rb_swapped_rgb565(dst,
                                         src,
