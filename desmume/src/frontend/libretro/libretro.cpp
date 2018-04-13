@@ -432,10 +432,7 @@ static void SwapScreenSmall_32(uint32_t *dst, const uint32_t *src, uint32_t pitc
     {
         for (y = 0; y < GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT; y++)
         {
-            if (draw)
-            {
-                memcpy (dst, src + y * GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, (pitch - GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * 3) * 4);
-            }
+            memcpy (dst, src + y * GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, (pitch - GPU_LR_FRAMEBUFFER_NATIVE_WIDTH * 3) * 4);
             dst += pitch;
         }
     }
