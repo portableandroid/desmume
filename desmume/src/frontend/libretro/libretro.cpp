@@ -1461,6 +1461,7 @@ static bool dummy_retro_gl_begin() { return true; }
 
 static bool context_needs_reinit = false;
 
+#ifdef HAVE_OPENGL
 static bool initialize_gl()
 {
     OGLLoadEntryPoints_3_2_Func = OGLLoadEntryPoints_3_2;
@@ -1490,6 +1491,7 @@ static bool initialize_gl()
 
     return true;
 }
+#endif
 
 static void context_destroy()
 {
@@ -1505,7 +1507,9 @@ static void context_reset() {
    if (!context_needs_reinit)
       return;
 
+#ifdef HAVE_OPENGL
    initialize_gl();
+#endif
 
    context_needs_reinit = false;
 }
