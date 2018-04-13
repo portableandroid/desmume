@@ -1518,7 +1518,7 @@ static void SPU_MixAudio_Advanced(bool actuallyMix, SPU_struct *SPU, int length)
 					cap.runtime.fifo.enqueue(capout[capchan]);
 
 					//static FILE* fp = NULL;
-					//if(!fp) fp = fopen_utf8("d:\\capout.raw","wb");
+					//if(!fp) fp = (FILE*)fopen_utf8("d:\\capout.raw","wb");
 					//fwrite(&sample,2,1,fp);
 					
 					if (cap.bits8)
@@ -1853,7 +1853,7 @@ bool WavWriter::open(const std::string & fname)
 	chunk_struct data;
 	size_t elems_written = 0;
 
-	if ((spufp = fopen_utf8(fname.c_str(), "wb")) == NULL)
+	if ((spufp = (FILE*)fopen_utf8(fname.c_str(), "wb")) == NULL)
 		return false;
 
 	// Do wave header

@@ -11,7 +11,7 @@ extern "C"
 #endif
 
 #ifdef _WIN32
-FILE* fopen_utf8(const char * filename, const char * mode);
+void *fopen_utf8(const char * filename, const char * mode);
 int stat_utf8(const char * filename, struct stat *buffer);
 int access_utf8(const char * filename, int mode);
 #else

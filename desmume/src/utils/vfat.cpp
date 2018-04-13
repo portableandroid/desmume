@@ -140,7 +140,7 @@ static void DirectoryListCallback(RDIR* rdir, EListCallbackArg arg)
 
 		if(callbackType == eCallbackType_Build)
 		{
-			FILE* inf = fopen_utf8(path.c_str(),"rb");
+			FILE* inf = (FILE*)fopen_utf8(path.c_str(),"rb");
 			if(inf)
 			{
 				fseek(inf,0,SEEK_END);

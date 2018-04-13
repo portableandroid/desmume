@@ -301,7 +301,7 @@ private:
 		mPositionCacheEnabled = false;
 		mCondition = eCondition_Clean;
 		mFilePosition = 0;
-		fp = fopen_utf8(fname,mode);
+		fp = (FILE*)fopen_utf8(fname,mode);
 		if(!fp)
 			failbit = true;
 		this->fname = fname;

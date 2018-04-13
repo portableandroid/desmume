@@ -1058,7 +1058,7 @@ bool savestate_save (const char *file_name)
 	if (!savestate_save(ms, 0))
 #endif
 		return false;
-	FILE* file = fopen_utf8(file_name,"wb");
+	FILE* file = (FILE*)fopen_utf8(file_name,"wb");
 	if(file)
 	{
 		elems_written = fwrite(ms.buf(),1,ms.size(),file);

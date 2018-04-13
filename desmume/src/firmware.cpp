@@ -256,7 +256,7 @@ bool CFIRMWARE::load()
 	if (strlen(CommonSettings.Firmware) == 0)
 		return false;
 	
-	FILE	*fp = fopen_utf8(CommonSettings.Firmware, "rb");
+	FILE	*fp = (FILE*)fopen_utf8(CommonSettings.Firmware, "rb");
 	if (!fp)
 		return false;
 	fseek(fp, 0, SEEK_END);
@@ -517,7 +517,7 @@ bool CFIRMWARE::loadSettings()
 	if (!CommonSettings.UseExtFirmware) return false;
 	if (!CommonSettings.UseExtFirmwareSettings) return false;
 
-	FILE *fp = fopen_utf8(MMU.fw.userfile, "rb");
+	FILE *fp = (FILE*)fopen_utf8(MMU.fw.userfile, "rb");
 	if (fp)
 	{
 		fseek(fp, 0, SEEK_END);
@@ -575,7 +575,7 @@ bool CFIRMWARE::saveSettings()
 	}
 	
 	printf("Firmware: saving config");
-	FILE *fp = fopen_utf8(MMU.fw.userfile, "wb");
+	FILE *fp = (FILE*)fopen_utf8(MMU.fw.userfile, "wb");
 	if (fp)
 	{
 		u8 *usr = new u8[DFC_FILE_SIZE];

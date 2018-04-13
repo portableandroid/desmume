@@ -108,8 +108,12 @@ struct RDIR *retro_opendir(const char *name)
 #endif
    struct RDIR *rdir  = (struct RDIR*)calloc(1, sizeof(*rdir));
 
-   if (!rdir)
+   if (!rdir||!name)
+   {
+      if (rdir)
+         free(rdir);
       return NULL;
+   }
 
 #if defined(_WIN32)
    (void)path_wide;

@@ -1136,7 +1136,7 @@ const char no_GBA_HEADER_SRAM_ID[] = "SRAM";
 
 u32 BackupDevice::get_save_nogba_size(const char* fname)
 {
-	FILE *fsrc = fopen_utf8(fname, "rb");
+	FILE *fsrc = (FILE*)fopen_utf8(fname, "rb");
 	if (fsrc)
 	{
 		char src[0x50] = {0};
@@ -1297,7 +1297,7 @@ u32 BackupDevice::fillLeft(u32 size)
 
 bool BackupDevice::import_no_gba(const char *fname, u32 force_size)
 {
-	FILE	*fsrc = fopen_utf8(fname, "rb");
+	FILE	*fsrc = (FILE*)fopen_utf8(fname, "rb");
 	u8		*in_buf = NULL;
 	u8		*out_buf = NULL;
 
@@ -1374,7 +1374,7 @@ bool BackupDevice::export_no_gba(const char* fname)
 	fpMC->fread((char *)&data[0], fsize);
 	fpMC->fseek(pos, SEEK_SET);
 
-	FILE* outf = fopen_utf8(fname,"wb");
+	FILE* outf = (FILE*)fopen_utf8(fname,"wb");
 	if(!outf) return false;
 	u32 size = data.size();
 	u32 padSize = pad_up_size(size);
@@ -1403,7 +1403,7 @@ bool BackupDevice::export_raw(const char* filename)
 	fpMC->fread((char *)&data[0], fsize);
 	fpMC->fseek(pos, SEEK_SET);
 
-	FILE* outf = fopen_utf8(filename,"wb");
+	FILE* outf = (FILE*)fopen_utf8(filename,"wb");
 	if(!outf) return false;
 	u32 size = data.size();
 	u32 padSize = pad_up_size(size);
@@ -1459,7 +1459,7 @@ void BackupDevice::raw_applyUserSettings(u32& size, bool manual)
 
 u32 BackupDevice::get_save_raw_size(const char* fname)
 {
-	FILE* inf = fopen_utf8(fname,"rb");
+	FILE* inf = (FILE*)fopen_utf8(fname,"rb");
 	if (!inf) return 0xFFFFFFFF;
 
 	fseek(inf, 0, SEEK_END);
@@ -1470,7 +1470,7 @@ u32 BackupDevice::get_save_raw_size(const char* fname)
 
 bool BackupDevice::import_raw(const char* filename, u32 force_size)
 {
-	FILE* inf = fopen_utf8(filename,"rb");
+	FILE* inf = (FILE*)fopen_utf8(filename,"rb");
 
 	if (!inf) return false;
 
@@ -1510,7 +1510,7 @@ bool BackupDevice::import_raw(const char* filename, u32 force_size)
 
 u32 BackupDevice::get_save_duc_size(const char* fname)
 {
-	FILE* inf = fopen_utf8(fname,"rb");
+	FILE* inf = (FILE*)fopen_utf8(fname,"rb");
 	if (!inf) return 0xFFFFFFFF;
 
 	fseek(inf, 0, SEEK_END);
@@ -1524,7 +1524,7 @@ bool BackupDevice::import_duc(const char* filename, u32 force_size)
 {
 	u32 size;
 	u8 id16[16] = {0}, id4[4] = {0}, id3[3] = {0};
-	FILE* file = fopen_utf8(filename, "rb");
+	FILE* file = (FILE*)fopen_utf8(filename, "rb");
 
 	if(!file) return false;
 
@@ -1600,7 +1600,7 @@ bool BackupDevice::import_dsv(const char *filename)
 {
 	bool result = false;
 	
-	FILE *theFile = fopen_utf8(filename, "rb");
+	FILE *theFile = (FILE*)fopen_utf8(filename, "rb");
 	if (theFile == NULL)
 	{
 		return result;

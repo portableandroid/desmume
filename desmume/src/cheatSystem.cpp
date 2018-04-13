@@ -780,7 +780,7 @@ BOOL CHEATS::save()
 {
 	const char	*types[] = {"DS", "AR", "CB"};
 	std::string	cheatLineStr = "";
-	FILE		*flist = fopen_utf8((char *)filename, "w");
+	FILE		*flist = (FILE*)fopen_utf8((char *)filename, "w");
 
 	if (flist)
 	{
@@ -849,7 +849,7 @@ char *CHEATS::clearCode(char *s)
 
 BOOL CHEATS::load()
 {
-	FILE *flist = fopen_utf8((char *)filename, "r");
+	FILE *flist = (FILE*)fopen_utf8((char *)filename, "r");
 	if (flist == NULL)
 	{
 		return FALSE;
@@ -1435,7 +1435,7 @@ bool CHEATSEXPORT::load(char *path)
 {
 	error = 0;
 
-	fp = fopen_utf8(path, "rb");
+	fp = (FILE*)fopen_utf8(path, "rb");
 	if (!fp)
 	{
 		printf("Error open database\n");
