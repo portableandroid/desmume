@@ -81,29 +81,30 @@ ifeq ($(DESMUME_OPENGL_CORE),1)
 SOURCES_CXX += $(CORE_DIR)/OGLRender_3_2.cpp 
 endif
 
-SOURCES_C := \
-	$(CORE_DIR)/utils/libfat/partition.c \
-	$(CORE_DIR)/utils/libfat/cache.c \
-	$(CORE_DIR)/utils/libfat/directory.c \
-	$(CORE_DIR)/utils/libfat/disc.c \
-	$(CORE_DIR)/utils/libfat/fatdir.c \
-	$(CORE_DIR)/utils/libfat/fatfile.c \
-	$(CORE_DIR)/utils/libfat/filetime.c \
-	$(CORE_DIR)/utils/libfat/file_allocation_table.c \
-	$(CORE_DIR)/utils/libfat/libfat.c \
-	$(CORE_DIR)/utils/libfat/libfat_public_api.c \
-	$(CORE_DIR)/utils/libfat/lock.c
+SOURCES_CXX += \
+	$(CORE_DIR)/utils/libfat/partition.cpp \
+	$(CORE_DIR)/utils/libfat/cache.cpp \
+	$(CORE_DIR)/utils/libfat/directory.cpp \
+	$(CORE_DIR)/utils/libfat/disc.cpp \
+	$(CORE_DIR)/utils/libfat/fatdir.cpp \
+	$(CORE_DIR)/utils/libfat/fatfile.cpp \
+	$(CORE_DIR)/utils/libfat/filetime.cpp \
+	$(CORE_DIR)/utils/libfat/file_allocation_table.cpp \
+	$(CORE_DIR)/utils/libfat/libfat.cpp \
+	$(CORE_DIR)/utils/libfat/libfat_public_api.cpp \
+	$(CORE_DIR)/utils/libfat/lock.cpp
 
 # We can only stop excluding this for Vita once we have more
 # filesystem functions implemented 
 SOURCES_CXX += $(CORE_DIR)/addons/slot1_retail_mcrom_debug.cpp \
 					$(CORE_DIR)/utils/fsnitro.cpp
-SOURCES_CXX += $(CORE_DIR)/utils/task.cpp
-SOURCES_C   += $(LIBRETRO_COMM_DIR)/rthreads/rthreads.c
+SOURCES_CXX += $(CORE_DIR)/utils/task.cpp \
+               $(CORE_DIR)/common.cpp \
+               $(CORE_DIR)/utils/dlditool.cpp \
+               $(CORE_DIR)/version.cpp
+SOURCES_C   := $(LIBRETRO_COMM_DIR)/rthreads/rthreads.c
 
-SOURCES_C += $(CORE_DIR)/common.c \
-				 $(CORE_DIR)/utils/dlditool.c \
-				 $(LIBRETRO_COMM_DIR)/memmap/memalign.c \
+SOURCES_C += $(LIBRETRO_COMM_DIR)/memmap/memalign.c \
 				 $(LIBRETRO_COMM_DIR)/streams/file_stream.c \
 				 $(LIBRETRO_COMM_DIR)/vfs/vfs_implementation.c \
 				 $(LIBRETRO_COMM_DIR)/features/features_cpu.c \
@@ -113,8 +114,7 @@ SOURCES_C += $(CORE_DIR)/common.c \
 				 $(LIBRETRO_COMM_DIR)/file/retro_dirent.c \
 				 $(LIBRETRO_COMM_DIR)/file/file_path.c \
 				 $(LIBRETRO_COMM_DIR)/string/stdstring.c \
-				 $(LIBRETRO_COMM_DIR)/encodings/encoding_utf.c \
-				 $(CORE_DIR)/version.c
+				 $(LIBRETRO_COMM_DIR)/encodings/encoding_utf.c
 
 ifeq ($(DESMUME_JIT_ARM),1)
 SOURCES_CXX += \
