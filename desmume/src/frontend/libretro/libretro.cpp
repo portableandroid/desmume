@@ -931,7 +931,7 @@ static void check_variables(bool first_boot)
 
     var.key = "desmume_hybrid_layout_scale";
 
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    if (scale < 3 && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         if ((atoi(var.value)) != hybrid_layout_scale)
         {
@@ -940,6 +940,8 @@ static void check_variables(bool first_boot)
                 hybrid_layout_scale = 1;
         }
     }
+    else
+       hybrid_layout_scale = 1;
 
     var.key = "desmume_pointer_mouse";
 
