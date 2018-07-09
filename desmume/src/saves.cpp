@@ -57,7 +57,7 @@
 
 #include "path.h"
 
-#ifdef HOST_WINDOWS
+#if !defined(__LIBRETRO__) && defined(HOST_WINDOWS)
 #include "frontend/windows/main.h"
 #endif
 
