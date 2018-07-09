@@ -202,6 +202,7 @@ addr_t quickFind (const data_t* data, const data_t* search, size_t dataLen, size
 	return -1;
 }
 
+#ifndef __LIBRETRO__
 FILE *openDLDIFile(const char *argv0, char *dldiFileName ) {
 
 
@@ -305,6 +306,7 @@ FILE *openDLDIFile(const char *argv0, char *dldiFileName ) {
 
 	return (FILE*)fopen_utf8(appPath,"rb");		// no more places to check, just return this handle
 }
+#endif
 
 //int main(int argc, char* argv[])
 //{
