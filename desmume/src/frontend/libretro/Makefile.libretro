@@ -246,8 +246,8 @@ else ifneq (,$(findstring windows_msvc2017,$(platform)))
 		LIBS += WindowsApp.lib
 	endif
 
-	CFLAGS += -DWIN32 $(MSVC2017CompileFlags)
-	CXXFLAGS += -DWIN32 $(MSVC2017CompileFlags)
+	CFLAGS += -DWIN32 -DNOMINMAX $(MSVC2017CompileFlags)
+	CXXFLAGS += -DWIN32 -DNOMINMAX $(MSVC2017CompileFlags)
 
 	TargetArchMoniker = $(subst $(WinPartition)_,,$(PlatformSuffix))
 
@@ -316,7 +316,7 @@ else ifneq (,$(findstring windows_msvc2017,$(platform)))
     
 	export INCLUDE := $(INCLUDE);$(WindowsSDKSharedIncludeDir);$(WindowsSDKUCRTIncludeDir);$(WindowsSDKUMIncludeDir)
 	export LIB := $(LIB);$(WindowsSDKUCRTLibDir);$(WindowsSDKUMLibDir)
-	TARGET := $(TARGET_NAME)_libretro.dll $(TARGET_NAME)_libretro.lib $(TARGET_NAME)_libretro.pdb $(TARGET_NAME)_libretro.exp
+	TARGET := $(TARGET_NAME)_libretro.dll
 	PSS_STYLE :=2
 	LDFLAGS += -DLL
 
