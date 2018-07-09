@@ -126,7 +126,7 @@ public:
 
 	void LoadModulePath()
 	{
-#if defined(HOST_WINDOWS)
+#if !defined(__LIBRETRO__) && defined(HOST_WINDOWS)
 
 		char *p;
 		ZeroMemory(pathToModule, sizeof(pathToModule));
@@ -141,7 +141,7 @@ public:
 		{
 			strcpy(pathToModule,_hack_alternateModulePath);
 		}
-#elif defined(DESMUME_COCOA)
+#elif !defined(__LIBRETRO__) && defined(DESMUME_COCOA)
 		std::string pathStr = Path::GetFileDirectoryPath(path);
 
 		strncpy(pathToModule, pathStr.c_str(), MAX_PATH);
