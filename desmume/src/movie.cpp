@@ -50,7 +50,7 @@ bool autoMovieBackup = true;
 
 #define MOVIE_VERSION 1
 
-#ifdef WIN32
+#if !defined(__LIBRETRO__) && defined(WIN32)
 #include "frontend/windows/main.h"
 #endif
 

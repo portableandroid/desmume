@@ -20,7 +20,7 @@
 #include <string.h>
 #include "types.h"
 
-#if defined(HOST_WINDOWS)
+#if !defined(__LIBRETRO__) && defined(HOST_WINDOWS)
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
 	#include <direct.h>
@@ -197,7 +197,7 @@ public:
 
 	void GetDefaultPath(char *pathToDefault, const char *key, int maxCount)
 	{
-#ifdef HOST_WINDOWS
+#if !defined(__LIBRETRO__) && defined(HOST_WINDOWS)
 		std::string temp = (std::string)"." + DIRECTORY_DELIMITER_CHAR + pathToDefault;
 		strncpy(pathToDefault, temp.c_str(), maxCount);
 #else
@@ -207,7 +207,7 @@ public:
 
 	void ReadKey(char *pathToRead, const char *key)
 	{
-#ifdef HOST_WINDOWS
+#if !defined(__LIBRETRO__) && defined(HOST_WINDOWS)
 		GetPrivateProfileString(SECTION, key, key, pathToRead, MAX_PATH, IniName);
 		if(strcmp(pathToRead, key) == 0) {
 			//since the variables are all intialized in this file they all use MAX_PATH
@@ -234,7 +234,7 @@ public:
 		ReadKey(pathToFirmware, FIRMWAREKEY);
 		ReadKey(pathToLua, LUAKEY);
 		ReadKey(pathToSlot1D, SLOT1DKEY);
-#ifdef HOST_WINDOWS
+#if !defined(__LIBRETRO__) && defined(HOST_WINDOWS)
 		GetPrivateProfileString(SECTION, FORMATKEY, "%f_%s_%r", screenshotFormat, MAX_FORMAT, IniName);
 		savelastromvisit	= GetPrivateProfileBool(SECTION, LASTVISITKEY, true, IniName);
 		currentimageformat	= (ImageFormat)GetPrivateProfileInt(SECTION, DEFAULTFORMATKEY, PNG, IniName);
