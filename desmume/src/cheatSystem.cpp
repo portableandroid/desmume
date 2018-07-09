@@ -28,6 +28,7 @@
 #endif
 
 #include "compat/fopen_utf8.h"
+#include <algorithm>
 
 CHEATS *cheats = NULL;
 CHEATSEARCH *cheatSearch = NULL;
