@@ -70,3 +70,10 @@ xcuserdata/
 /.cproject
 /config.log
 /.project
+
+## Windows binaries
+*.dll
+*.lib
+*.pdb
+*.exp
+*.manifest

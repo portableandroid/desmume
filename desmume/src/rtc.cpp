@@ -24,7 +24,7 @@
 #include "armcpu.h"
 #include <string.h>
 #include "saves.h"
-#ifdef WIN32
+#if !defined(__LIBRETRO__) && defined(WIN32)
 #include "frontend/windows/main.h"
 #endif
 #include "movie.h"

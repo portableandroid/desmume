@@ -168,12 +168,13 @@ static size_t _FAT_directory_ucs2tombs (char* dst, const ucs2_t* src, size_t len
 	mbstate_t ps = {0};
 	size_t count = 0;
 	int bytes;
-	char* buff = (char*)alloca(MB_CUR_MAX);
+	char* buff = (char*)malloc(MB_CUR_MAX);
 	int i;
 	
 	while (count < len - 1 && *src != '\0') {
 		bytes = wcrtomb (buff, *src, &ps);
 		if (bytes < 0) {
+			free(buff);
 			return -1;
 		}
 		if (count + bytes < len && bytes > 0) {
@@ -188,6 +189,7 @@ static size_t _FAT_directory_ucs2tombs (char* dst, const ucs2_t* src, size_t len
 	}
 	*dst = L'\0';
 	
+	free(buff);
 	return count;
 }
 

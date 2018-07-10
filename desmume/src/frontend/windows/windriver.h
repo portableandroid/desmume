@@ -20,9 +20,12 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include "common.h"
+
+#ifndef __LIBRETRO__
 #include "CWindow.h"
 
 extern WINCLASS	*MainWindow;
+#endif
 
 class Lock {
 public:
