@@ -30,24 +30,13 @@ distribution.
 #endif
 
 #include "tinyxml.h"
-#include "streams/file_stream_transforms.h"
-
-FILE* TiXmlFOpen( const char* filename, const char* mode );
 
 bool TiXmlBase::condenseWhiteSpace = true;
 
 // Microsoft compiler security
 FILE* TiXmlFOpen( const char* filename, const char* mode )
 {
-	#if defined(_MSC_VER) && (_MSC_VER >= 1400 )
-		FILE* fp = 0;
-		errno_t err = fopen_s( &fp, filename, mode );
-		if ( !err && fp )
-			return fp;
-		return 0;
-	#else
-		return (FILE*)fopen( filename, mode );
-	#endif
+	return (FILE*)fopen( filename, mode );
 }
 
 void TiXmlBase::EncodeString( const TIXML_STRING& str, TIXML_STRING* outString )
