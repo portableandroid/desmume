@@ -19,6 +19,8 @@
 #include "common.h"
 #include "path.h"
 
+#include "streams/file_stream.h"
+
 #ifdef HAVE_OPENGL
 #include "OGLRender.h"
 #include "OGLRender_3_2.h"
@@ -1349,6 +1351,7 @@ void retro_set_input_state(retro_input_state_t cb) { input_cb = cb; }
 
 void retro_set_environment(retro_environment_t cb)
 {
+   struct retro_vfs_interface_info vfs_iface_info;
    environ_cb = cb;
 
    static const retro_variable values[] =
@@ -1403,6 +1406,11 @@ void retro_set_environment(retro_environment_t cb)
    };
 
    environ_cb(RETRO_ENVIRONMENT_SET_VARIABLES, (void*)values);
+
+   vfs_iface_info.required_interface_version = FILESTREAM_REQUIRED_VFS_VERSION;
+   vfs_iface_info.iface                      = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_iface_info))
+	   filestream_vfs_init(&vfs_iface_info);
 }
 
 
