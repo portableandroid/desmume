@@ -40,6 +40,7 @@ RETRO_BEGIN_DECLS
 #undef fgetc
 #undef fwrite
 #undef fputc
+#undef fflush
 #undef fprintf
 #undef ferror
 #undef feof

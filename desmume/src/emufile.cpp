@@ -64,11 +64,7 @@ size_t EMUFILE_MEMORY::_fread(const void *ptr, size_t bytes){
 void EMUFILE_FILE::truncate(s32 length)
 {
 	::fflush(fp);
-	#ifdef HOST_WINDOWS 
-		_chsize(_fileno(fp),length);
-	#else
-		ftruncate(fileno(fp),length);
-	#endif
+	filestream_truncate(fp, length);
 	fclose(fp);
 	fp = NULL;
 	open(fname.c_str(),mode);
