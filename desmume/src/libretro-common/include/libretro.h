@@ -1064,11 +1064,11 @@ typedef int (RETRO_CALLCONV *retro_vfs_rename_t)(const char *old_path, const cha
 
 struct retro_vfs_interface
 {
+      /* VFS API v1 */
 	retro_vfs_get_path_t get_path;
 	retro_vfs_open_t open;
 	retro_vfs_close_t close;
 	retro_vfs_size_t size;
-      retro_vfs_truncate_t truncate;
 	retro_vfs_tell_t tell;
 	retro_vfs_seek_t seek;
 	retro_vfs_read_t read;
@@ -1076,6 +1076,9 @@ struct retro_vfs_interface
 	retro_vfs_flush_t flush;
 	retro_vfs_remove_t remove;
 	retro_vfs_rename_t rename;
+      
+      /* VFS API v2 */
+      retro_vfs_truncate_t truncate;
 };
 
 struct retro_vfs_interface_info
