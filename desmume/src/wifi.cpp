@@ -46,7 +46,7 @@
 #include "NDSSystem.h"
 #include "debug.h"
 #include "registers.h"
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 
 #ifndef INVALID_SOCKET 	 
 	#define INVALID_SOCKET  (socket_t)-1 	 

@@ -57,7 +57,7 @@
 #include "SPU.h"
 #include "wifi.h"
 #include "Database.h"
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 
 #ifdef GDB_STUB
 #include "gdbstub.h"

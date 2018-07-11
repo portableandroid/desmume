@@ -31,7 +31,7 @@
 #include "../path.h"
 #include "../NDSSystem.h"
 #include "../utils/fsnitro.h"
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 
 class Slot1_Retail_DEBUG : public ISlot1Interface, public ISlot1Comp_Protocol_Client
 {

@@ -25,7 +25,7 @@
 #include <zzip/zzip.h>
 #endif
 
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 
 #if defined(_WIN32) && defined(_MSVC_VER) 
 #define stat(...) stat_utf8(__VA_ARGS__)

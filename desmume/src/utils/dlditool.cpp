@@ -70,7 +70,7 @@ typedef int int32_t;
 #endif
 
 #include <sys/stat.h>
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 
 namespace DLDI
 {

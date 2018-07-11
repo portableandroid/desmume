@@ -30,7 +30,7 @@ distribution.
 #endif
 
 #include "tinyxml.h"
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 
 FILE* TiXmlFOpen( const char* filename, const char* mode );
 

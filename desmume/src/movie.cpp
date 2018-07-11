@@ -29,7 +29,7 @@
 #include "utils/datetime.h"
 #include "encodings/utf.h"
 
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 
 #include "MMU.h"
 #include "NDSSystem.h"

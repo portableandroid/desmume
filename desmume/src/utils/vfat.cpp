@@ -33,7 +33,7 @@
 #include "emufat.h"
 #include "vfat.h"
 #include "libfat/libfat_public_api.h"
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 
 enum EListCallbackArg {
 	EListCallbackArg_Item, EListCallbackArg_Pop

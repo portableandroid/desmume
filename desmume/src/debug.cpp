@@ -29,7 +29,7 @@
 #include "utils/xstring.h"
 #include "movie.h"
 
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 
 #ifdef HAVE_LUA
 #include "lua-engine.h"

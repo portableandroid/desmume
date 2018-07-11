@@ -27,7 +27,7 @@
 #include <stdint.h>
 #endif
 
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 #include <algorithm>
 
 CHEATS *cheats = NULL;
