@@ -53,6 +53,7 @@ RETRO_BEGIN_DECLS
 #define fgetc rfgetc
 #define fwrite rfwrite
 #define fputc rfputc
+#define fflush rfflush
 #define fprintf rfprintf
 #define ferror rferror
 #define feof rfeof
@@ -76,6 +77,8 @@ size_t rfwrite(void const* buffer,
    size_t elementSize, size_t elementCount, RFILE* stream);
 
 int rfputc(int character, RFILE * stream);
+
+int rfflush(RFILE * stream);
 
 int rfprintf(RFILE * stream, const char * format, ...);
 
