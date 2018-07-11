@@ -21,6 +21,8 @@
 #include <string>
 #include "types.h"
 
+#include "streams/file_stream_transforms.h"
+
 #define NDS_FW_SIZE_V1 (256 * 1024)		/* size of fw memory on nds v1 */
 #define NDS_FW_SIZE_V2 (512 * 1024)		/* size of fw memory on nds v2 */
 

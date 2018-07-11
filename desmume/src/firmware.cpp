@@ -22,7 +22,6 @@
 #include "path.h"
 #include "encrypt.h"
 #include "wifi.h"
-#include "streams/file_stream_transforms.h"
 
 #define DFC_ID_CODE	"DeSmuME Firmware User Settings"
 #define DFC_ID_SIZE	sizeof(DFC_ID_CODE)
