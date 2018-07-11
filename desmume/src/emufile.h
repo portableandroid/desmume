@@ -335,7 +335,9 @@ public:
 	virtual int fprintf(const char *format, ...) {
 		va_list argptr;
 		va_start(argptr, format);
-		int ret = ::vfprintf(fp, format, argptr);
+		static char buffer[1024];
+		int string_len = ::vsprintf(buffer, format, argptr);
+		int ret = ::fwrite(buffer, sizeof(char), string_len, fp);
 		va_end(argptr);
 		return ret;
 	};
