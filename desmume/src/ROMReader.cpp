@@ -88,7 +88,7 @@ void* STDROMReaderInit(const char* filename)
 		return 0;
 #endif
 
-	FILE* inf = (FILE*)fopen_utf8(filename, "rb");
+	FILE* inf = (FILE*)fopen(filename, "rb");
 	if(!inf) return NULL;
 
 	STDROMReaderData* ret = new STDROMReaderData();

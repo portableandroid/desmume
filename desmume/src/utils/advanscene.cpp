@@ -37,7 +37,7 @@ ADVANsCEne advsc;
 u8 ADVANsCEne::checkDB(const char *ROMserial, u32 crc)
 {
 	loaded = false;
-	FILE *fp = (FILE*)fopen_utf8(database_path.c_str(), "rb");
+	FILE *fp = (FILE*)fopen(database_path.c_str(), "rb");
 	if (fp)
 	{
 		char buf[64];

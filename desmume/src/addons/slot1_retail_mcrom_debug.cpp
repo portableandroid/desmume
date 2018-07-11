@@ -136,7 +136,7 @@ public:
 						}
 						tmp = pathData + tmp;
 
-						fpROM = (FILE*)fopen_utf8(tmp.c_str(), "rb");
+						fpROM = (FILE*)fopen(tmp.c_str(), "rb");
 						if (fpROM)
 						{
 							bFromFile = true;

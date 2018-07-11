@@ -46,7 +46,7 @@ FILE* TiXmlFOpen( const char* filename, const char* mode )
 			return fp;
 		return 0;
 	#else
-		return (FILE*)fopen_utf8( filename, mode );
+		return (FILE*)fopen( filename, mode );
 	#endif
 }
 

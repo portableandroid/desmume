@@ -1163,7 +1163,7 @@ GraphVizContext::~GraphVizContext()
 
 bool GraphVizContext::openFile(const char* fileName)
 {
-  file = (FILE*)fopen_utf8(fileName, "w");
+  file = (FILE*)fopen(fileName, "w");
   return file != NULL;
 }
 

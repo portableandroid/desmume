@@ -222,7 +222,7 @@ FILE *openDLDIFile(const char *argv0, char *dldiFileName ) {
 
 	printf ("Trying \"%s\"\n", dldiFileName);
 	// try opening from current directory
-	dldiFile = (FILE*)fopen_utf8(dldiFileName,"rb");
+	dldiFile = (FILE*)fopen(dldiFileName,"rb");
 
 	if ( NULL != dldiFile ) return dldiFile;
 
@@ -243,7 +243,7 @@ FILE *openDLDIFile(const char *argv0, char *dldiFileName ) {
 		strcat ( appPath, dldiFileName );
 		
 		printf ("Trying \"%s\"\n", appPath);
-		dldiFile = (FILE*)fopen_utf8(appPath,"rb");
+		dldiFile = (FILE*)fopen(appPath,"rb");
 
 		if ( NULL != dldiFile ) return dldiFile;
 		 
@@ -304,7 +304,7 @@ FILE *openDLDIFile(const char *argv0, char *dldiFileName ) {
 	strcat(appPath,dldiFileName);	// add dldi filename to path
 	printf ("Trying \"%s\"\n", appPath);
 
-	return (FILE*)fopen_utf8(appPath,"rb");		// no more places to check, just return this handle
+	return (FILE*)fopen(appPath,"rb");		// no more places to check, just return this handle
 }
 #endif
 
@@ -368,7 +368,7 @@ FILE *openDLDIFile(const char *argv0, char *dldiFileName ) {
 //			return EXIT_FAILURE;
 //	}
 //
-//	if (!(appFile = (FILE*)fopen_utf8 (appFileName, "rb+"))) {
+//	if (!(appFile = (FILE*)fopen(appFileName, "rb+"))) {
 //		printf ("Cannot open \"%s\" - %s\n", appFileName, strerror(errno));
 //		return EXIT_FAILURE;
 //	}

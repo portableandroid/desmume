@@ -2199,7 +2199,7 @@ void SoftAP_SendPacket(u8 *packet, u32 len)
 	/*static int ctr=0;
 	char buf[100];
 	sprintf(buf,"wifi%04d.txt",ctr);
-	FILE* outf = fopen_utf8(buf,"wb");
+	FILE* outf = fopen(buf,"wb");
 	fwrite(packet,1,len,outf);
 	fclose(outf);
 	ctr++;*/
