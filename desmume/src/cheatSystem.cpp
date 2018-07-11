@@ -27,7 +27,6 @@
 #include <stdint.h>
 #endif
 
-#include "streams/file_stream_transforms.h"
 #include <algorithm>
 
 CHEATS *cheats = NULL;
@@ -788,7 +787,7 @@ BOOL CHEATS::save()
 		fprintf(flist, "; DeSmuME cheats file. VERSION %i.%03i\n", CHEAT_VERSION_MAJOR, CHEAT_VERSION_MINOR);
 		fprintf(flist, "Name=%s\n", gameInfo.ROMname);
 		fprintf(flist, "Serial=%s\n", gameInfo.ROMserial);
-		fputs("\n; cheats list\n", flist);
+		fprintf(flist, "%s", "\n; cheats list\n");
 		for (size_t i = 0;  i < list.size(); i++)
 		{
 			if (list[i].num == 0) continue;
@@ -821,7 +820,7 @@ BOOL CHEATS::save()
 			cheatLineStr += trim(list[i].description);
 			fprintf(flist, "%s\n", cheatLineStr.c_str());
 		}
-		fputs("\n", flist);
+		fputc('\n', flist);
 		fclose(flist);
 		return TRUE;
 	}
