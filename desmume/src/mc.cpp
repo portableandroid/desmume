@@ -34,8 +34,6 @@
 #include "utils/xstring.h"
 #include "emufile.h"
 
-#include "streams/file_stream_transforms.h"
-
 //#define _DONT_SAVE_BACKUP
 //#define _MCLOG
 
@@ -237,7 +235,7 @@ BackupDevice::BackupDevice()
 
 	MCLOG("MC: %s\n", _fileName.c_str());
 
-	bool fexists = (access_utf8(_fileName.c_str(), 0) == 0)?true:false;
+	bool fexists = filestream_exists(_fileName.c_str());
 
 	if (fexists && CommonSettings.backupSave)
 	{
