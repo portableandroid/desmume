@@ -29,8 +29,6 @@
 #include "utils/xstring.h"
 #include "movie.h"
 
-#include "streams/file_stream_transforms.h"
-
 #ifdef HAVE_LUA
 #include "lua-engine.h"
 #endif
