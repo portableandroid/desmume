@@ -23,25 +23,11 @@ THE SOFTWARE.
 */
 
 #include "emufile.h"
-#include "streams/file_stream.h"
+
+#define SKIP_STDIO_REDEFINES
+#include "streams/file_stream_transforms.h"
 
 #include <vector>
-
-RETRO_BEGIN_DECLS
-RFILE* rfopen(const char *path, const char *mode);
-int rfclose(RFILE* stream);
-long rftell(RFILE* stream);
-int rfseek(RFILE* stream, long offset, int origin);
-size_t rfread(void* buffer, size_t elementSize, size_t elementCount, RFILE* stream);
-char *rfgets(char *buffer, int maxCount, RFILE* stream);
-int rfgetc(RFILE* stream);
-size_t rfwrite(void const* buffer, size_t elementSize, size_t elementCount, RFILE* stream);
-int rfputc(int character, RFILE * stream);
-int rfflush(RFILE * stream);
-int rfprintf(RFILE * stream, const char * format, ...);
-int rferror(RFILE* stream);
-int rfeof(RFILE* stream);
-RETRO_END_DECLS
 
 bool EMUFILE::readAllBytes(std::vector<u8>* dstbuf, const std::string& fname)
 {
