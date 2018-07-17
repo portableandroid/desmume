@@ -34,7 +34,7 @@
 #include "utils/xstring.h"
 #include "emufile.h"
 
-#include "streams/file_stream_transforms.h"
+#include "streams/file_stream.h"
 
 //#define _DONT_SAVE_BACKUP
 //#define _MCLOG
@@ -1600,7 +1600,7 @@ bool BackupDevice::import_dsv(const char *filename)
 {
 	bool result = false;
 	
-	FILE *theFile = (FILE*)fopen(filename, "rb");
+	RFILE *theFile = filestream_open(filename, RETRO_VFS_FILE_ACCESS_READ, RETRO_VFS_FILE_ACCESS_HINT_NONE);
 	if (theFile == NULL)
 	{
 		return result;
@@ -1629,9 +1629,9 @@ bool BackupDevice::import_dsv(const char *filename)
 	// Read the backup data into memory.
 	u8 *backupData = (u8 *)malloc(importFileFooter.info.padSize);
 	
-	fseek(theFile, 0, SEEK_SET);
-	const size_t backupDataReadByteCount = fread(backupData, 1, importFileFooter.info.padSize, theFile);
-	fclose(theFile); // At this point, both backup data and footer should have been read, so we can close the import file now.
+	filestream_seek(theFile, 0, RETRO_VFS_SEEK_POSITION_START);
+	const size_t backupDataReadByteCount = filestream_read(theFile, backupData, importFileFooter.info.padSize);
+	filestream_close(theFile); // At this point, both backup data and footer should have been read, so we can close the import file now.
 	
 	if (backupDataReadByteCount != importFileFooter.info.padSize)
 	{
@@ -1714,7 +1714,7 @@ size_t BackupDevice::GetDSVFooterSize()
 	return (strlen(DESMUME_BACKUP_FOOTER_TXT) + sizeof(BackupDeviceFileSaveFooter));
 }
 
-bool BackupDevice::GetDSVFileInfo(FILE *inFileDSV, BackupDeviceFileSaveFooter *outFooter, size_t *outFileSize)
+bool BackupDevice::GetDSVFileInfo(RFILE *inFileDSV, BackupDeviceFileSaveFooter *outFooter, size_t *outFileSize)
 {
 	bool result = false;
 	
@@ -1724,9 +1724,7 @@ bool BackupDevice::GetDSVFileInfo(FILE *inFileDSV, BackupDeviceFileSaveFooter *o
 	}
 	
 	// Get the total file size.
-	fseek(inFileDSV, 0, SEEK_END);
-	const size_t inFileSize = (size_t)ftell(inFileDSV);
-	fseek(inFileDSV, 0, SEEK_SET);
+	const size_t inFileSize = filestream_get_size(inFileDSV);
 	
 	// Check for the DeSmuME footer.
 	if (inFileSize < BackupDevice::GetDSVFooterSize())
@@ -1738,8 +1736,8 @@ bool BackupDevice::GetDSVFileInfo(FILE *inFileDSV, BackupDeviceFileSaveFooter *o
 	// Validate the DeSmuME footer.
 	BackupDeviceFileSaveFooter inFileFooter;
 	
-	fseek(inFileDSV, -(s32)sizeof(inFileFooter), SEEK_END);
-	const size_t footerReadByteCount = fread(&inFileFooter, 1, sizeof(inFileFooter), inFileDSV);
+	filestream_seek(inFileDSV, -(s32)sizeof(inFileFooter), RETRO_VFS_SEEK_POSITION_END);
+	const size_t footerReadByteCount = filestream_read(inFileDSV, &inFileFooter, sizeof(inFileFooter));
 	
 	if (footerReadByteCount != sizeof(inFileFooter))
 	{

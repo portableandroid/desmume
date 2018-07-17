@@ -23,8 +23,25 @@ THE SOFTWARE.
 */
 
 #include "emufile.h"
+#include "streams/file_stream.h"
 
 #include <vector>
+
+RETRO_BEGIN_DECLS
+RFILE* rfopen(const char *path, const char *mode);
+int rfclose(RFILE* stream);
+long rftell(RFILE* stream);
+int rfseek(RFILE* stream, long offset, int origin);
+size_t rfread(void* buffer, size_t elementSize, size_t elementCount, RFILE* stream);
+char *rfgets(char *buffer, int maxCount, RFILE* stream);
+int rfgetc(RFILE* stream);
+size_t rfwrite(void const* buffer, size_t elementSize, size_t elementCount, RFILE* stream);
+int rfputc(int character, RFILE * stream);
+int rfflush(RFILE * stream);
+int rfprintf(RFILE * stream, const char * format, ...);
+int rferror(RFILE* stream);
+int rfeof(RFILE* stream);
+RETRO_END_DECLS
 
 bool EMUFILE::readAllBytes(std::vector<u8>* dstbuf, const std::string& fname)
 {
@@ -61,13 +78,52 @@ size_t EMUFILE_MEMORY::_fread(const void *ptr, size_t bytes){
 	return todo;
 }
 
+EMUFILE_FILE::~EMUFILE_FILE()
+{
+	if(NULL != fp)
+		rfclose(fp);
+}
+
+void EMUFILE_FILE::open(const char* fname, const char* mode)
+{
+	mPositionCacheEnabled = false;
+	mCondition = eCondition_Clean;
+	mFilePosition = 0;
+	fp = rfopen(fname,mode);
+	if(!fp)
+		failbit = true;
+	this->fname = fname;
+	strcpy(this->mode,mode);
+}
+
 void EMUFILE_FILE::truncate(s32 length)
 {
-	::fflush(fp);
+	rfflush(fp);
 	filestream_truncate(fp, length);
-	fclose(fp);
+	rfclose(fp);
 	fp = NULL;
 	open(fname.c_str(),mode);
+}
+
+int EMUFILE_FILE::fprintf(const char *format, ...)
+{
+	va_list argptr;
+	va_start(argptr, format);
+	static char buffer[1024];
+	int string_len = ::vsprintf(buffer, format, argptr);
+	int ret = rfwrite(buffer, sizeof(char), string_len, fp);
+	va_end(argptr);
+	return ret;
+};
+
+int EMUFILE_FILE::fgetc()
+{
+	return rfgetc(fp);
+}
+
+int EMUFILE_FILE::fputc(int c)
+{
+	return rfputc(c, fp);
 }
 
 int EMUFILE_FILE::fseek(int offset, int origin)
@@ -86,10 +142,10 @@ int EMUFILE_FILE::fseek(int offset, int origin)
 
 	mCondition = eCondition_Clean;
 
-	int ret = ::fseek(fp, offset, origin);
+	int ret = rfseek(fp, offset, origin);
  
 	if(mPositionCacheEnabled)
-		mFilePosition = ::ftell(fp);
+		mFilePosition = rftell(fp);
  
 	return ret;
 }
@@ -99,7 +155,21 @@ int EMUFILE_FILE::ftell()
 {
 	if(mPositionCacheEnabled)
 		return (int)mFilePosition;
-	return (u32)::ftell(fp);
+	return (u32)rftell(fp);
+}
+
+int EMUFILE_FILE::size()
+{ 
+	int oldpos = ftell();
+	fseek(0,SEEK_END);
+	int len = ftell();
+	fseek(oldpos,SEEK_SET);
+	return len;
+}
+
+void EMUFILE_FILE::fflush()
+{
+	rfflush(fp);
 }
 
 void EMUFILE_FILE::DemandCondition(eCondition cond)
@@ -116,7 +186,7 @@ void EMUFILE_FILE::DemandCondition(eCondition cond)
 	return;
 
 RESET:
-	::fseek(fp,::ftell(fp),SEEK_SET);
+	rfseek(fp, rftell(fp),SEEK_SET);
 CONCLUDE:
 	mCondition = cond;
 }
@@ -124,7 +194,7 @@ CONCLUDE:
 size_t EMUFILE_FILE::_fread(const void *ptr, size_t bytes)
 {
 	DemandCondition(eCondition_Read);
-	size_t ret = ::fread((void*)ptr, 1, bytes, fp);
+	size_t ret = rfread((void*)ptr, 1, bytes, fp);
 	mFilePosition += ret;
 	if(ret < bytes)
 		failbit = true;
@@ -134,13 +204,13 @@ size_t EMUFILE_FILE::_fread(const void *ptr, size_t bytes)
 void EMUFILE_FILE::EnablePositionCache()
 {
 	mPositionCacheEnabled = true; 
-	mFilePosition = ::ftell(fp);
+	mFilePosition = rftell(fp);
 }
 
 size_t EMUFILE_FILE::fwrite(const void *ptr, size_t bytes)
 {
 	DemandCondition(eCondition_Write);
-	size_t ret = ::fwrite((void*)ptr, 1, bytes, fp);
+	size_t ret = rfwrite((void*)ptr, 1, bytes, fp);
 	mFilePosition += ret;
 	if(ret < bytes)
 		failbit = true;

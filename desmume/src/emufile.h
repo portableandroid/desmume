@@ -43,7 +43,7 @@ THE SOFTWARE.
 #include <unistd.h>
 #endif
 
-#include "streams/file_stream_transforms.h"
+struct RFILE;
 
 class EMUFILE_MEMORY;
 
@@ -78,7 +78,7 @@ public:
 	//virtuals
 public:
 
-	virtual FILE *get_fp() = 0;
+	virtual RFILE *get_fp() = 0;
 
 	virtual int fprintf(const char *format, ...) = 0;
 
@@ -190,7 +190,7 @@ public:
 
 	std::vector<u8>* get_vec() const { return vec; };
 
-	virtual FILE *get_fp() { return NULL; }
+	virtual RFILE *get_fp() { return NULL; }
 
 	virtual int fprintf(const char *format, ...) {
 		va_list argptr;
@@ -296,17 +296,7 @@ protected:
 	} mCondition;
 
 private:
-	void open(const char* fname, const char* mode)
-	{
-		mPositionCacheEnabled = false;
-		mCondition = eCondition_Clean;
-		mFilePosition = 0;
-		fp = (FILE*)fopen(fname,mode);
-		if(!fp)
-			failbit = true;
-		this->fname = fname;
-		strcpy(this->mode,mode);
-	}
+	void open(const char* fname, const char* mode);
 
 public:
 
@@ -315,12 +305,9 @@ public:
 
 	void EnablePositionCache();
 
-	virtual ~EMUFILE_FILE() {
-		if(NULL != fp)
-			rfclose(fp);
-	}
+	virtual ~EMUFILE_FILE();
 
-	virtual FILE *get_fp() {
+	virtual RFILE *get_fp() {
 		return fp; 
 	}
 
@@ -332,22 +319,10 @@ public:
 
 	virtual void truncate(s32 length);
 
-	virtual int fprintf(const char *format, ...) {
-		va_list argptr;
-		va_start(argptr, format);
-		static char buffer[1024];
-		int string_len = ::vsprintf(buffer, format, argptr);
-		int ret = ::rfwrite(buffer, sizeof(char), string_len, fp);
-		va_end(argptr);
-		return ret;
-	};
+	virtual int fprintf(const char *format, ...);
 
-	virtual int fgetc() {
-		return ::rfgetc(fp);
-	}
-	virtual int fputc(int c) {
-		return ::rfputc(c, fp);
-	}
+	virtual int fgetc();
+	virtual int fputc(int c);
 
 	virtual size_t _fread(const void *ptr, size_t bytes);
 	virtual size_t fwrite(const void *ptr, size_t bytes);
@@ -356,18 +331,9 @@ public:
 
 	virtual int ftell();
 
-	virtual int size() { 
-		int oldpos = ftell();
-		fseek(0,SEEK_END);
-		int len = ftell();
-		fseek(oldpos,SEEK_SET);
-		return len;
-	}
+	virtual int size();
 
-	virtual void fflush() {
-		::rfflush(fp);
-	}
-
+	virtual void fflush();
 };
 
 #endif

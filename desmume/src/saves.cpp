@@ -61,7 +61,7 @@
 #include "frontend/windows/main.h"
 #endif
 
-#include "streams/file_stream_transforms.h"
+#include "streams/file_stream.h"
 
 int lastSaveState = 0;		//Keeps track of last savestate used for quick save/load functions
 
