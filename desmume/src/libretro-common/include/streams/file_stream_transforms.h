@@ -29,9 +29,9 @@
 
 RETRO_BEGIN_DECLS
 
-#define FILE RFILE
-
 #ifndef SKIP_STDIO_REDEFINES
+
+#define FILE RFILE
 
 #undef fopen
 #undef fclose
