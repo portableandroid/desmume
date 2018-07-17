@@ -29,6 +29,8 @@
 
 #include <algorithm>
 
+#include "streams/file_stream_transforms.h"
+
 CHEATS *cheats = NULL;
 CHEATSEARCH *cheatSearch = NULL;
 

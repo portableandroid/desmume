@@ -25,6 +25,8 @@
 #include "../common.h"
 #include "../mc.h"
 #include "../emufile.h"
+
+#define SKIP_STDIO_REDEFINES
 #include "streams/file_stream_transforms.h"
 
 ADVANsCEne advsc;
@@ -37,7 +39,7 @@ ADVANsCEne advsc;
 u8 ADVANsCEne::checkDB(const char *ROMserial, u32 crc)
 {
 	loaded = false;
-	FILE *fp = (FILE*)rfopen(database_path.c_str(), "rb");
+	RFILE *fp = rfopen(database_path.c_str(), "rb");
 	if (fp)
 	{
 		char buf[64];
