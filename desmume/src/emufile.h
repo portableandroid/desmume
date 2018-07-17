@@ -281,7 +281,7 @@ public:
 
 class EMUFILE_FILE : public EMUFILE { 
 protected:
-	FILE* fp;
+	RFILE* fp;
 	std::string fname;
 	char mode[16];
 	long mFilePosition;
@@ -317,7 +317,7 @@ public:
 
 	virtual ~EMUFILE_FILE() {
 		if(NULL != fp)
-			fclose(fp);
+			rfclose(fp);
 	}
 
 	virtual FILE *get_fp() {
@@ -337,16 +337,16 @@ public:
 		va_start(argptr, format);
 		static char buffer[1024];
 		int string_len = ::vsprintf(buffer, format, argptr);
-		int ret = ::fwrite(buffer, sizeof(char), string_len, fp);
+		int ret = ::rfwrite(buffer, sizeof(char), string_len, fp);
 		va_end(argptr);
 		return ret;
 	};
 
 	virtual int fgetc() {
-		return ::fgetc(fp);
+		return ::rfgetc(fp);
 	}
 	virtual int fputc(int c) {
-		return ::fputc(c, fp);
+		return ::rfputc(c, fp);
 	}
 
 	virtual size_t _fread(const void *ptr, size_t bytes);
@@ -365,7 +365,7 @@ public:
 	}
 
 	virtual void fflush() {
-		::fflush(fp);
+		::rfflush(fp);
 	}
 
 };

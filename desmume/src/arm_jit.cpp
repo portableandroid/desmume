@@ -18,7 +18,6 @@
 */
 
 #include "types.h"
-#include "streams/file_stream_transforms.h"
 
 #ifdef HAVE_JIT
 #if !defined(HOST_32) && !defined(HOST_64)
@@ -4208,7 +4207,9 @@ static u32 compile_basicblock()
 	ArmOpCompiled f = (ArmOpCompiled)c.make();
 	if(c.getError())
 	{
+#if LOG_JIT
 		fprintf(stderr, "JIT error at %s%c-%08X: %s\n", bb_thumb?"THUMB":"ARM", PROCNUM?'7':'9', start_adr, getErrorString(c.getError()));
+#endif
 		f = op_decode[PROCNUM][bb_thumb];
 	}
 #if LOG_JIT

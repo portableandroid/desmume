@@ -37,29 +37,29 @@ ADVANsCEne advsc;
 u8 ADVANsCEne::checkDB(const char *ROMserial, u32 crc)
 {
 	loaded = false;
-	FILE *fp = (FILE*)fopen(database_path.c_str(), "rb");
+	FILE *fp = (FILE*)rfopen(database_path.c_str(), "rb");
 	if (fp)
 	{
 		char buf[64];
 		memset(buf, 0, sizeof(buf));
-		if (fread(buf, 1, strlen(_ADVANsCEne_BASE_ID), fp) == strlen(_ADVANsCEne_BASE_ID))
+		if (rfread(buf, 1, strlen(_ADVANsCEne_BASE_ID), fp) == strlen(_ADVANsCEne_BASE_ID))
 		{
 			//printf("ID: %s\n", buf);
 			if (strcmp(buf, _ADVANsCEne_BASE_ID) == 0)
 			{
-				if (fread(&versionBase[0], 1, 2, fp) == 2)
+				if (rfread(&versionBase[0], 1, 2, fp) == 2)
 				{
 					//printf("Version base: %i.%i\n", versionBase[0], versionBase[1]);
-					if (fread(&version[0], 1, 4, fp) == 4)
+					if (rfread(&version[0], 1, 4, fp) == 4)
 					{
 						//printf("Version: %c%c%c%c\n", version[3], version[2], version[1], version[0]);
-						if (fread(&createTime, 1, sizeof(time_t), fp) == sizeof(time_t))
+						if (rfread(&createTime, 1, sizeof(time_t), fp) == sizeof(time_t))
 						{
 							memset(buf, 0,sizeof(buf));
 							// serial(8) + crc32(4) + save_type(1) = 13 + reserved(8) = 21
 							while (true)
 							{
-								if (fread(buf, 1, 21, fp) != 21) break;
+								if (rfread(buf, 1, 21, fp) != 21) break;
 
 								bool serialFound = (memcmp(&buf[4], ROMserial, 4) == 0);
 								u32 dbcrc = LE_TO_LOCAL_32(*(u32*)(buf+8));
@@ -73,7 +73,7 @@ u8 ADVANsCEne::checkDB(const char *ROMserial, u32 crc)
 									memcpy(&serial[0], &buf[4], 4);
 									//printf("%s founded: crc32=%04X, save type %02X\n", ROMserial, crc32, buf[12]);
 									saveType = buf[12];
-									fclose(fp);
+									rfclose(fp);
 									loaded = true;
 									return true;
 								}
@@ -83,7 +83,7 @@ u8 ADVANsCEne::checkDB(const char *ROMserial, u32 crc)
 				}
 			}
 		}
-		fclose(fp);
+		rfclose(fp);
 	}
 	return false;
 }
