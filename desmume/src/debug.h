@@ -27,8 +27,6 @@
 #include "types.h"
 #include "mem.h"
 
-#include "streams/file_stream_transforms.h"
-
 struct armcpu_t;
 class EMUFILE;
 

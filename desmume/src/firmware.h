@@ -21,7 +21,7 @@
 #include <string>
 #include "types.h"
 
-#include "streams/file_stream_transforms.h"
+struct RFILE;
 
 #define NDS_FW_SIZE_V1 (256 * 1024)		/* size of fw memory on nds v1 */
 #define NDS_FW_SIZE_V2 (512 * 1024)		/* size of fw memory on nds v2 */
@@ -110,7 +110,7 @@ struct fw_memory_chip
 	BOOL writeable_buffer;	//is "data" writeable ?
 	int type; //type of Memory
 	char *filename;
-	FILE *fp;
+	struct RFILE *fp;
 	
 	// needs only for firmware
 	bool isFirmware;

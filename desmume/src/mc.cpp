@@ -34,6 +34,8 @@
 #include "utils/xstring.h"
 #include "emufile.h"
 
+#include "streams/file_stream_transforms.h"
+
 //#define _DONT_SAVE_BACKUP
 //#define _MCLOG
 

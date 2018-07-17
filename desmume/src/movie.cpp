@@ -29,8 +29,6 @@
 #include "utils/datetime.h"
 #include "encodings/utf.h"
 
-#include "streams/file_stream_transforms.h"
-
 #include "MMU.h"
 #include "NDSSystem.h"
 #include "readwrite.h"
