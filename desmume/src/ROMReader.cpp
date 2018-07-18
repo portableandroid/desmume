@@ -79,15 +79,6 @@ struct STDROMReaderData
 
 void* STDROMReaderInit(const char* filename)
 {
-#ifndef _WIN32
-	struct stat sb;
-	if (stat_utf8(filename, &sb) == -1)
-		return 0;
-
- 	if ((sb.st_mode & S_IFMT) != S_IFREG)
-		return 0;
-#endif
-
 	FILE* inf = (FILE*)fopen(filename, "rb");
 	if(!inf) return NULL;
 
