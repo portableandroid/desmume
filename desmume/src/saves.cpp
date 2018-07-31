@@ -61,7 +61,7 @@
 #include "frontend/windows/main.h"
 #endif
 
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream.h"
 
 int lastSaveState = 0;		//Keeps track of last savestate used for quick save/load functions
 
@@ -680,10 +680,15 @@ void scan_savestates()
 	  
 	  if (strlen(filename) + strlen(".dst") + strlen("-2147483648") /* = biggest string for i */ >MAX_PATH) return ;
       sprintf(filename+strlen(filename), ".ds%d", i);
+#ifndef __LIBRETRO__
       if( stat_utf8(filename,&sbuf) == -1 ) continue;
-      savestates[i].exists = TRUE;
-      strncpy(savestates[i].date, format_time(sbuf.st_mtime),40);
+	  strncpy(savestates[i].date, format_time(sbuf.st_mtime),40);
 	  savestates[i].date[40-1] = '\0';
+#else
+      if( filestream_exists(filename) == false ) continue;
+	  savestates[i].date[0] = '\0';
+#endif
+      savestates[i].exists = TRUE;
     }
 
   return ;
@@ -715,12 +720,20 @@ void savestate_slot(int num)
 
    if (num >= 0 && num < NB_STATES)
    {
-          if (stat_utf8(filename,&sbuf) != -1)
+#ifndef __LIBRETRO__
+       if (stat_utf8(filename,&sbuf) != -1)
 	   {
 		   savestates[num].exists = TRUE;
 		   strncpy(savestates[num].date, format_time(sbuf.st_mtime),40);
 		   savestates[num].date[40-1] = '\0';
 	   }
+#else
+       if (filestream_exists(filename) == true)
+	   {
+		   savestates[num].exists = TRUE;
+		   savestates[num].date[0] = '\0';
+	   }
+#endif
    }
 }
 
@@ -1058,7 +1071,7 @@ bool savestate_save (const char *file_name)
 	if (!savestate_save(ms, 0))
 #endif
 		return false;
-	FILE* file = (FILE*)fopen_utf8(file_name,"wb");
+	FILE* file = (FILE*)fopen(file_name,"wb");
 	if(file)
 	{
 		elems_written = fwrite(ms.buf(),1,ms.size(),file);

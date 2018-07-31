@@ -46,7 +46,7 @@
 #include "NDSSystem.h"
 #include "debug.h"
 #include "registers.h"
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 
 #ifndef INVALID_SOCKET 	 
 	#define INVALID_SOCKET  (socket_t)-1 	 
@@ -2199,7 +2199,7 @@ void SoftAP_SendPacket(u8 *packet, u32 len)
 	/*static int ctr=0;
 	char buf[100];
 	sprintf(buf,"wifi%04d.txt",ctr);
-	FILE* outf = fopen_utf8(buf,"wb");
+	FILE* outf = fopen(buf,"wb");
 	fwrite(packet,1,len,outf);
 	fclose(outf);
 	ctr++;*/

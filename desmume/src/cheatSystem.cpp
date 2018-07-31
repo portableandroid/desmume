@@ -27,8 +27,9 @@
 #include <stdint.h>
 #endif
 
-#include "compat/fopen_utf8.h"
 #include <algorithm>
+
+#include "streams/file_stream_transforms.h"
 
 CHEATS *cheats = NULL;
 CHEATSEARCH *cheatSearch = NULL;
@@ -781,14 +782,14 @@ BOOL CHEATS::save()
 {
 	const char	*types[] = {"DS", "AR", "CB"};
 	std::string	cheatLineStr = "";
-	FILE		*flist = (FILE*)fopen_utf8((char *)filename, "w");
+	FILE		*flist = (FILE*)fopen((char *)filename, "w");
 
 	if (flist)
 	{
 		fprintf(flist, "; DeSmuME cheats file. VERSION %i.%03i\n", CHEAT_VERSION_MAJOR, CHEAT_VERSION_MINOR);
 		fprintf(flist, "Name=%s\n", gameInfo.ROMname);
 		fprintf(flist, "Serial=%s\n", gameInfo.ROMserial);
-		fputs("\n; cheats list\n", flist);
+		fprintf(flist, "%s", "\n; cheats list\n");
 		for (size_t i = 0;  i < list.size(); i++)
 		{
 			if (list[i].num == 0) continue;
@@ -821,7 +822,7 @@ BOOL CHEATS::save()
 			cheatLineStr += trim(list[i].description);
 			fprintf(flist, "%s\n", cheatLineStr.c_str());
 		}
-		fputs("\n", flist);
+		fputc('\n', flist);
 		fclose(flist);
 		return TRUE;
 	}
@@ -850,7 +851,7 @@ char *CHEATS::clearCode(char *s)
 
 BOOL CHEATS::load()
 {
-	FILE *flist = (FILE*)fopen_utf8((char *)filename, "r");
+	FILE *flist = (FILE*)fopen((char *)filename, "r");
 	if (flist == NULL)
 	{
 		return FALSE;
@@ -1436,7 +1437,7 @@ bool CHEATSEXPORT::load(char *path)
 {
 	error = 0;
 
-	fp = (FILE*)fopen_utf8(path, "rb");
+	fp = (FILE*)fopen(path, "rb");
 	if (!fp)
 	{
 		printf("Error open database\n");

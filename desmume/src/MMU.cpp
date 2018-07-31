@@ -48,6 +48,8 @@
 #include "SPU.h"
 #include "emufile.h"
 
+#include "streams/file_stream.h"
+
 #ifdef DO_ASSERT_UNALIGNED
 #define ASSERT_UNALIGNED(x) assert(x)
 #else
@@ -940,7 +942,7 @@ void MMU_Init(void)
 void MMU_DeInit(void) {
 	LOG("MMU deinit\n");
 	if (MMU.fw.fp)
-		fclose(MMU.fw.fp);
+		filestream_close(MMU.fw.fp);
 	mc_free(&MMU.fw);      
 
 	slot1_Shutdown();
@@ -3610,7 +3612,9 @@ void FASTCALL _MMU_ARM9_write08(u32 adr, u8 val)
 					if(nds.ensataEmulation)
 					{
 						printf("%c",val);
+						#ifndef __LIBRETRO__
 						fflush(stdout);
+						#endif
 					}
 					break;
 					

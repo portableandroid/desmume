@@ -26,6 +26,8 @@
 
 #include "types.h"
 
+struct RFILE;
+
 #define MAX_SAVE_TYPES 13
 #define MC_TYPE_AUTODETECT      0x0
 #define MC_TYPE_EEPROM1         0x1
@@ -158,7 +160,7 @@ public:
 	BackupDeviceFileInfo GetFileInfo();
 
 	static size_t GetDSVFooterSize();
-	static bool GetDSVFileInfo(FILE *inFileDSV, BackupDeviceFileSaveFooter *outFooter, size_t *outFileSize);
+	static bool GetDSVFileInfo(struct RFILE *inFileDSV, BackupDeviceFileSaveFooter *outFooter, size_t *outFileSize);
 
 	//the value contained in memory when shipped from factory (before user program ever writes to it). more details commented elsewhere.
 	u8 uninitializedValue;

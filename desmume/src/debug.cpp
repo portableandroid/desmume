@@ -29,8 +29,6 @@
 #include "utils/xstring.h"
 #include "movie.h"
 
-#include "compat/fopen_utf8.h"
-
 #ifdef HAVE_LUA
 #include "lua-engine.h"
 #endif
@@ -108,7 +106,7 @@ void HandleDebugEvent_CacheMiss()
 	extern int currFrameCounter;
 	if(currFrameCounter<200) return;
 	static FILE* outf = NULL;
-	if(!outf) outf = (FILE*)fopen_utf8("c:\\miss.txt","wb");
+	if(!outf) outf = (FILE*)fopen("c:\\miss.txt","wb");
 	fprintf(outf,"%05d,%08X,%d\n",currFrameCounter,DebugEventData.addr,DebugEventData.size);
 }
 

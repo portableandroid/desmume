@@ -43,8 +43,6 @@
 #include "matrix.h"
 #include "utils/bits.h"
 
-#include "compat/fopen_utf8.h"
-
 static inline s16 read16(u32 addr) { return (s16)_MMU_read16<ARMCPU_ARM7,MMU_AT_DEBUG>(addr); }
 static inline u8 read08(u32 addr) { return _MMU_read08<ARMCPU_ARM7,MMU_AT_DEBUG>(addr); }
 static inline s8 read_s8(u32 addr) { return (s8)_MMU_read08<ARMCPU_ARM7,MMU_AT_DEBUG>(addr); }
@@ -1518,7 +1516,7 @@ static void SPU_MixAudio_Advanced(bool actuallyMix, SPU_struct *SPU, int length)
 					cap.runtime.fifo.enqueue(capout[capchan]);
 
 					//static FILE* fp = NULL;
-					//if(!fp) fp = (FILE*)fopen_utf8("d:\\capout.raw","wb");
+					//if(!fp) fp = (FILE*)fopen("d:\\capout.raw","wb");
 					//fwrite(&sample,2,1,fp);
 					
 					if (cap.bits8)
@@ -1853,7 +1851,7 @@ bool WavWriter::open(const std::string & fname)
 	chunk_struct data;
 	size_t elems_written = 0;
 
-	if ((spufp = (FILE*)fopen_utf8(fname.c_str(), "wb")) == NULL)
+	if ((spufp = (FILE*)fopen(fname.c_str(), "wb")) == NULL)
 		return false;
 
 	// Do wave header

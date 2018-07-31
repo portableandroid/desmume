@@ -34,6 +34,8 @@
 #define CHEAT_TYPE_AR 1
 #define CHEAT_TYPE_CODEBREAKER 2
 
+typedef struct RFILE RFILE;
+
 struct CHEATS_LIST
 {
 	CHEATS_LIST()
@@ -144,7 +146,7 @@ class CHEATSEXPORT
 private:
 	CHEATS_DB_TYPE		type;
 	bool				encrypted;
-	FILE				*fp;
+	RFILE				*fp;
 	u32					fsize;
 	u32					dataSize;
 	u32					encOffset;

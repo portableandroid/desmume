@@ -22,7 +22,8 @@
 #include "path.h"
 #include "encrypt.h"
 #include "wifi.h"
-#include "compat/fopen_utf8.h"
+
+#include "streams/file_stream_transforms.h"
 
 #define DFC_ID_CODE	"DeSmuME Firmware User Settings"
 #define DFC_ID_SIZE	sizeof(DFC_ID_CODE)
@@ -256,7 +257,7 @@ bool CFIRMWARE::load()
 	if (strlen(CommonSettings.Firmware) == 0)
 		return false;
 	
-	FILE	*fp = (FILE*)fopen_utf8(CommonSettings.Firmware, "rb");
+	FILE	*fp = (FILE*)fopen(CommonSettings.Firmware, "rb");
 	if (!fp)
 		return false;
 	fseek(fp, 0, SEEK_END);
@@ -517,7 +518,7 @@ bool CFIRMWARE::loadSettings()
 	if (!CommonSettings.UseExtFirmware) return false;
 	if (!CommonSettings.UseExtFirmwareSettings) return false;
 
-	FILE *fp = (FILE*)fopen_utf8(MMU.fw.userfile, "rb");
+	FILE *fp = (FILE*)fopen(MMU.fw.userfile, "rb");
 	if (fp)
 	{
 		fseek(fp, 0, SEEK_END);
@@ -575,7 +576,7 @@ bool CFIRMWARE::saveSettings()
 	}
 	
 	printf("Firmware: saving config");
-	FILE *fp = (FILE*)fopen_utf8(MMU.fw.userfile, "wb");
+	FILE *fp = (FILE*)fopen(MMU.fw.userfile, "wb");
 	if (fp)
 	{
 		u8 *usr = new u8[DFC_FILE_SIZE];

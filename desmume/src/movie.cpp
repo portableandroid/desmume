@@ -29,8 +29,6 @@
 #include "utils/datetime.h"
 #include "encodings/utf.h"
 
-#include "compat/fopen_utf8.h"
-
 #include "MMU.h"
 #include "NDSSystem.h"
 #include "readwrite.h"
@@ -516,7 +514,7 @@ const char* _CDECL_ FCEUI_LoadMovie(const char *fname, bool _read_only, bool tas
 	currMovieData = MovieData();
 	
 	strcpy(curMovieFilename, fname);
-	//FCEUFILE *fp = FCEU_fopen_utf8(fname,0,"rb",0);
+	//FCEUFILE *fp = FCEU_fopen(fname,0,"rb",0);
 	//if (!fp) return;
 	//if(fp->isArchive() && !_read_only) {
 	//	FCEU_PrintError("Cannot open a movie in read+write from an archive.");
@@ -619,7 +617,7 @@ bool MovieData::loadSramFrom(std::vector<u8>* buf)
 ///*	memorystream ms;
 //
 //	//size it
-//	FILE * fp = (FILE*)fopen_utf8( fname.c_str(), "r" );
+//	FILE * fp = (FILE*)fopen( fname.c_str(), "r" );
 //	if(!fp)
 //		return 0;
 //	
@@ -1128,7 +1126,7 @@ static bool CheckFileExists(const char* filename)
 		checkFilename = filename;
 			
 	//Check if this filename exists
-	FILE* fp = (FILE*)fopen_utf8(checkFilename.c_str(), "rb");
+	FILE* fp = (FILE*)fopen(checkFilename.c_str(), "rb");
 		
 	if (!fp)
 	{

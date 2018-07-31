@@ -25,7 +25,7 @@
 #include <zzip/zzip.h>
 #endif
 
-#include "compat/fopen_utf8.h"
+#include "streams/file_stream_transforms.h"
 
 #if defined(_WIN32) && defined(_MSVC_VER) 
 #define stat(...) stat_utf8(__VA_ARGS__)
@@ -79,16 +79,7 @@ struct STDROMReaderData
 
 void* STDROMReaderInit(const char* filename)
 {
-#ifndef _WIN32
-	struct stat sb;
-	if (stat_utf8(filename, &sb) == -1)
-		return 0;
-
- 	if ((sb.st_mode & S_IFMT) != S_IFREG)
-		return 0;
-#endif
-
-	FILE* inf = (FILE*)fopen_utf8(filename, "rb");
+	FILE* inf = (FILE*)fopen(filename, "rb");
 	if(!inf) return NULL;
 
 	STDROMReaderData* ret = new STDROMReaderData();

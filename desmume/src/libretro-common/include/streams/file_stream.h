@@ -37,17 +37,19 @@
 
 #include <stdarg.h>
 
-#define FILESTREAM_REQUIRED_VFS_VERSION 1
+#define FILESTREAM_REQUIRED_VFS_VERSION 2
 
 RETRO_BEGIN_DECLS
 
 typedef struct RFILE RFILE;
 
-#define FILESTREAM_REQUIRED_VFS_VERSION 1
+#define FILESTREAM_REQUIRED_VFS_VERSION 2
 
 void filestream_vfs_init(const struct retro_vfs_interface_info* vfs_info);
 
 int64_t filestream_get_size(RFILE *stream);
+
+int filestream_truncate(RFILE *stream, int64_t length);
 
 /**
  * filestream_open:
@@ -66,7 +68,7 @@ int64_t filestream_read(RFILE *stream, void *data, int64_t len);
 
 int64_t filestream_write(RFILE *stream, const void *data, int64_t len);
 
-int64_t filestream_tell(RFILE *stream);
+int64_t filestream_tell(RFILE *stream);;
 
 void filestream_rewind(RFILE *stream);
 
