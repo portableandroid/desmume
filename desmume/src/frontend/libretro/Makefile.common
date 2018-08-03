@@ -105,9 +105,6 @@ SOURCES_CXX += $(CORE_DIR)/utils/task.cpp \
 SOURCES_C   := $(LIBRETRO_COMM_DIR)/rthreads/rthreads.c
 
 SOURCES_C += $(LIBRETRO_COMM_DIR)/memmap/memalign.c \
-				 $(LIBRETRO_COMM_DIR)/streams/file_stream.c \
-				 $(LIBRETRO_COMM_DIR)/streams/file_stream_transforms.c \
-				 $(LIBRETRO_COMM_DIR)/vfs/vfs_implementation.c \
 				 $(LIBRETRO_COMM_DIR)/features/features_cpu.c \
 				 $(LIBRETRO_COMM_DIR)/compat/compat_strl.c \
 				 $(LIBRETRO_COMM_DIR)/compat/compat_strcasestr.c \
@@ -117,6 +114,13 @@ SOURCES_C += $(LIBRETRO_COMM_DIR)/memmap/memalign.c \
 				 $(LIBRETRO_COMM_DIR)/file/file_path.c \
 				 $(LIBRETRO_COMM_DIR)/string/stdstring.c \
 				 $(LIBRETRO_COMM_DIR)/encodings/encoding_utf.c
+
+ifneq ($(STATIC_LINKING), 1)
+SOURCES_C += \
+				 $(LIBRETRO_COMM_DIR)/streams/file_stream.c \
+				 $(LIBRETRO_COMM_DIR)/streams/file_stream_transforms.c \
+				 $(LIBRETRO_COMM_DIR)/vfs/vfs_implementation.c
+endif
 
 ifeq ($(DESMUME_JIT_ARM),1)
 SOURCES_CXX += \
