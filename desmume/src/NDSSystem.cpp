@@ -101,6 +101,8 @@ int TotalLagFrames;
 
 TSCalInfo TSCal;
 
+WifiEmulationLevel wifiEmulationLevel = WifiEmulationLevel_Off;
+
 namespace DLDI
 {
 	bool tryPatch(void* data, size_t size, unsigned int device);
@@ -1336,8 +1338,13 @@ void Sequencer::init()
 
 
 	#ifdef EXPERIMENTAL_WIFI_COMM
-	wifi.enabled = true;
-	wifi.timestamp = kWifiCycles;
+	if(wifiEmulationLevel > WifiEmulationLevel_Off) 
+	{
+		wifi.enabled = true;
+		wifi.timestamp = kWifiCycles;
+	}
+	else
+		wifi.enabled = false;
 	#else
 	wifi.enabled = false;
 	#endif
@@ -1667,7 +1674,7 @@ u64 Sequencer::findNext()
 	if(readslot1.isEnabled()) next = _fast_min(next,readslot1.next());
 
 #ifdef EXPERIMENTAL_WIFI_COMM
-	next = _fast_min(next,wifi.next());
+	if (wifiEmulationLevel > WifiEmulationLevel_Off) next = _fast_min(next,wifi.next());
 #endif
 
 #define test(X,Y) if(dma_##X##_##Y .isEnabled()) next = _fast_min(next,dma_##X##_##Y .next());
@@ -1725,10 +1732,13 @@ void Sequencer::execHardware()
 	}
 
 #ifdef EXPERIMENTAL_WIFI_COMM
-	if(wifi.isTriggered())
+	if(wifiEmulationLevel > WifiEmulationLevel_Off)
 	{
-		WIFI_usTrigger();
-		wifi.timestamp += kWifiCycles;
+		if(wifi.isTriggered())
+		{
+			WIFI_usTrigger();
+			wifi.timestamp += kWifiCycles;
+		}
 	}
 #endif
 	

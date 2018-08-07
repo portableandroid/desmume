@@ -1,5 +1,5 @@
 /*
-	Copyright (C) 2017 DeSmuME team
+	Copyright (C) 2017-2018 DeSmuME team
  
 	This file is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -25,7 +25,10 @@
 #include "ClientInputHandler.h"
 
 #include "../../slot1.h"
+
+#ifdef BOOL
 #undef BOOL
+#endif
 
 #define SPEED_SCALAR_QUARTER						0.25		// Speed scalar for quarter execution speed.
 #define SPEED_SCALAR_HALF							0.5			// Speed scalar for half execution speed.
@@ -41,6 +44,8 @@
 																// This value acts as a scalar multiple of the frame skip.
 #define FRAME_SKIP_BIAS								0.1			// May be any real number. This value acts as a vector addition to the frame skip.
 #define MAX_FRAME_SKIP								(DS_FRAMES_PER_SECOND / 2.98)
+
+class ClientAVCaptureObject;
 
 enum ExecutionBehavior
 {
@@ -98,6 +103,8 @@ struct ClientExecutionControlSettings
 	
 	ExecutionBehavior execBehavior;
 	FrameJumpBehavior jumpBehavior;
+	
+	ClientAVCaptureObject *avCaptureObject;
 };
 
 struct NDSFrameInfo
@@ -184,6 +191,8 @@ struct NDSFrameInfo
 	}
 };
 
+typedef void *gdbstub_handle_t;
+
 class ClientExecutionControl
 {
 protected:
@@ -204,6 +213,15 @@ protected:
 	uint8_t _framesToSkip;
 	ExecutionBehavior _prevExecBehavior;
 	
+	bool _isGdbStubStarted;
+	bool _enableGdbStubARM9;
+	bool _enableGdbStubARM7;
+	uint16_t _gdbStubPortARM9;
+	uint16_t _gdbStubPortARM7;
+	volatile gdbstub_handle_t _gdbStubHandleARM9;
+	volatile gdbstub_handle_t _gdbStubHandleARM7;
+	bool _isInDebugTrap;
+	
 	std::string _cpuEmulationEngineNameOut;
 	std::string _slot1DeviceNameOut;
 	std::string _rtcStringOut;
@@ -216,6 +234,10 @@ protected:
 public:
 	ClientExecutionControl();
 	~ClientExecutionControl();
+	
+	ClientAVCaptureObject* GetClientAVCaptureObject();
+	ClientAVCaptureObject* GetClientAVCaptureObjectApplied();
+	void SetClientAVCaptureObject(ClientAVCaptureObject *theCaptureObject);
 	
 	ClientInputHandler* GetClientInputHandler();
 	void SetClientInputHandler(ClientInputHandler *inputHandler);
@@ -296,6 +318,21 @@ public:
 	uint64_t GetFrameJumpTarget();
 	uint64_t GetFrameJumpTargetApplied();
 	void SetFrameJumpTarget(uint64_t newJumpTarget);
+	
+	bool IsGDBStubARM9Enabled();
+	void SetGDBStubARM9Enabled(bool theState);
+	bool IsGDBStubARM7Enabled();
+	void SetGDBStubARM7Enabled(bool theState);
+	
+	uint16_t GetGDBStubARM9Port();
+	void SetGDBStubARM9Port(uint16_t portNumber);
+	uint16_t GetGDBStubARM7Port();
+	void SetGDBStubARM7Port(uint16_t portNumber);
+	
+	bool IsGDBStubStarted();
+	void SetIsGDBStubStarted(bool theState);
+	bool IsInDebugTrap();
+	void SetIsInDebugTrap(bool theState);
 	
 	ExecutionBehavior GetPreviousExecutionBehavior();
 	ExecutionBehavior GetExecutionBehavior();

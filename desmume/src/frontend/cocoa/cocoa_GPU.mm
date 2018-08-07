@@ -448,22 +448,14 @@ public:
 	if (numberThreads == 0)
 	{
 		isCPUCoreCountAuto = YES;
-		
-		if (numberCores >= 8)
+		if (numberCores < 2)
 		{
-			numberCores = 8;
-		}
-		else if (numberCores >= 4)
-		{
-			numberCores = 4;
-		}
-		else if (numberCores >= 2)
-		{
-			numberCores = 2;
+			numberCores = 1;
 		}
 		else
 		{
-			numberCores = 1;
+			const NSUInteger reserveCoreCount = numberCores / 12; // For every 12 cores, reserve 1 core for the rest of the system.
+			numberCores -= reserveCoreCount;
 		}
 	}
 	else
@@ -955,8 +947,19 @@ public:
 	_threadMessageID = MESSAGE_NONE;
 	_fetchIndex = 0;
 	pthread_cond_init(&_condSignalFetch, NULL);
-	pthread_create(&_threadFetch, NULL, &RunFetchThread, self);
 	pthread_mutex_init(&_mutexFetchExecute, NULL);
+	
+	pthread_attr_t threadAttr;
+	pthread_attr_init(&threadAttr);
+	pthread_attr_setschedpolicy(&threadAttr, SCHED_RR);
+	
+	struct sched_param sp;
+	memset(&sp, 0, sizeof(struct sched_param));
+	sp.sched_priority = 44;
+	pthread_attr_setschedparam(&threadAttr, &sp);
+	
+	pthread_create(&_threadFetch, &threadAttr, &RunFetchThread, self);
+	pthread_attr_destroy(&threadAttr);
 	
 	_taskEmulationLoop = 0;
 	
@@ -1198,9 +1201,9 @@ public:
 	
 	for (CocoaDSOutput *cdsOutput in _cdsOutputList)
 	{
-		if ([cdsOutput isKindOfClass:[CocoaDSDisplayVideo class]])
+		if ([cdsOutput isKindOfClass:[CocoaDSDisplay class]])
 		{
-			[(CocoaDSDisplayVideo *)cdsOutput signalMessage:MESSAGE_RECEIVE_GPU_FRAME];
+			[(CocoaDSDisplay *)cdsOutput signalMessage:MESSAGE_RECEIVE_GPU_FRAME];
 		}
 	}
 	

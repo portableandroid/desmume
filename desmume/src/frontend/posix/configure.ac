@@ -53,6 +53,9 @@ AC_CHECK_LIB(zzip, zzip_open, [
 		AC_MSG_RESULT(no))
 ])
 
+dnl - Check for X11
+AC_PATH_X
+
 dnl - Check for SDL
 AC_PATH_PROGS(SDLCONFIG, [sdl-config sdl11-config])
 if test ! "x$SDLCONFIG" = "x" ; then
@@ -202,7 +205,7 @@ if test ! "x$HAVE_OPENAL" = "xyes" ; then
 fi
 AM_CONDITIONAL([HAVE_ALSA], [test "${HAVE_ALSA}" = "yes"])
 
-PKG_CHECK_MODULES(LIBAGG, libagg >= 2.5.0, FOUND_LIBAGG=yes, FOUND_LIBAGG=no)
+PKG_CHECK_MODULES(LIBAGG, libagg >= 2.4.0, FOUND_LIBAGG=yes, FOUND_LIBAGG=no)
 AM_CONDITIONAL([HAVE_LIBAGG], [test "x$libagg" = "xyes" -a "${FOUND_LIBAGG}" = "yes"])
 if test "x$libagg" = "xyes" ; then
    if test "x$FOUND_LIBAGG" = "xyes" ; then
