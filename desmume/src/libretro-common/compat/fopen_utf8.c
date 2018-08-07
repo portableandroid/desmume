@@ -1,3 +1,25 @@
+/* Copyright  (C) 2010-2018 The RetroArch team
+ *
+ * ---------------------------------------------------------------------------------------
+ * The following license statement only applies to this file (fopen_utf8.c).
+ * ---------------------------------------------------------------------------------------
+ *
+ * Permission is hereby granted, free of charge,
+ * to any person obtaining a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
+ * and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 #include <compat/fopen_utf8.h>
 #include <encodings/utf.h>
 #include <stdio.h>
@@ -34,41 +56,5 @@ void *fopen_utf8(const char * filename, const char * mode)
    free(mode_w);
    return ret;
 #endif
-}
-
-#undef stat
-int stat_utf8(const char * filename, struct stat *buffer)
-{
-    wchar_t * filename_w = utf8_to_utf16_string_alloc(filename);
-    struct _stat params;
-
-    int ret = _wstat(filename_w, &params);
-    free(filename_w);
-
-    if (buffer && !ret)
-    {
-        buffer->st_gid   = params.st_gid;
-        buffer->st_atime = params.st_atime;
-        buffer->st_ctime = params.st_ctime;
-        buffer->st_dev   = params.st_dev;
-        buffer->st_ino   = params.st_ino;
-        buffer->st_mode  = params.st_mode;
-        buffer->st_mtime = params.st_mtime;
-        buffer->st_nlink = params.st_nlink;
-        buffer->st_rdev  = params.st_rdev;
-        buffer->st_size  = params.st_size;
-        buffer->st_uid   = params.st_uid;
-    }
-
-    return ret;
-}
-
-#undef access
-int access_utf8(const char * filename, int mode)
-{
-    wchar_t * filename_w = utf8_to_utf16_string_alloc(filename);
-    int ret = _waccess(filename_w, mode);
-    free(filename_w);
-    return ret;
 }
 #endif

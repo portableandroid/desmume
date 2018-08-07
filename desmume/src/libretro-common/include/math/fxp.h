@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2017 The RetroArch team
+/* Copyright  (C) 2010-2018 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (fxp.h).
@@ -33,7 +33,7 @@
 
 static INLINE int64_t fx32_mul(const int32_t a, const int32_t b)
 {
-#if defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
+#ifdef _MSC_VER
    return __emul(a, b);
 #else
    return ((int64_t)a) * ((int64_t)b);
@@ -42,7 +42,7 @@ static INLINE int64_t fx32_mul(const int32_t a, const int32_t b)
 
 static INLINE int32_t fx32_shiftdown(const int64_t a)
 {
-#if defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
+#ifdef _MSC_VER
 	return (int32_t)__ll_rshift(a, 12);
 #else
 	return (int32_t)(a >> 12);
@@ -51,7 +51,7 @@ static INLINE int32_t fx32_shiftdown(const int64_t a)
 
 static INLINE int64_t fx32_shiftup(const int32_t a)
 {
-#if defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
+#ifdef _MSC_VER
 	return __ll_lshift(a, 12);
 #else
 	return ((int64_t)a) << 12;

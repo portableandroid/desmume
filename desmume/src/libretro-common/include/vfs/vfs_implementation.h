@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2017 The RetroArch team
+/* Copyright  (C) 2010-2018 The RetroArch team
 *
 * ---------------------------------------------------------------------------------------
 * The following license statement only applies to this file (vfs_implementation.h).
@@ -46,7 +46,7 @@ int retro_vfs_file_error_impl(libretro_vfs_implementation_file *stream);
 
 int64_t retro_vfs_file_size_impl(libretro_vfs_implementation_file *stream);
 
-int retro_vfs_file_truncate_impl(libretro_vfs_implementation_file *stream, int64_t length);
+int64_t retro_vfs_file_truncate_impl(libretro_vfs_implementation_file *stream, int64_t length);
 
 int64_t retro_vfs_file_tell_impl(libretro_vfs_implementation_file *stream);
 

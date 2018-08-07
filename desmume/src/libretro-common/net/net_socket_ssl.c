@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2017 The RetroArch team
+/* Copyright  (C) 2010-2018 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (net_socket.c).
@@ -69,7 +69,9 @@ void* ssl_socket_init(int fd, const char *domain)
 
    state->domain = domain;
 
+#ifdef DEBUG
    mbedtls_debug_set_threshold(DEBUG_LEVEL);
+#endif
 
    mbedtls_net_init(&state->net_ctx);
    mbedtls_ssl_init(&state->ctx);
