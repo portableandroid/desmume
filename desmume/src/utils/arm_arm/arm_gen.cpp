@@ -3,11 +3,12 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef __APPLE__
 #include <malloc.h>
+#endif
 #include "arm_gen.h"
 
 #ifdef _3DS
-# include <malloc.h>
 # include "3ds/memory.h"
 #elif defined(VITA)
 # include <psp2/kernel/sysmem.h>
