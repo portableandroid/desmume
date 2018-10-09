@@ -27,6 +27,7 @@
 #endif
 
 #include <stdlib.h>
+#include <string.h>
 
 #include <boolean.h>
 #include <rthreads/rthreads.h>
@@ -47,6 +48,8 @@
 #endif
 #elif defined(GEKKO)
 #include "gx_pthread.h"
+#elif defined(HAVE_LIBNX)
+#include "switch_pthread.h"
 #elif defined(_3DS)
 #include "ctr_pthread.h"
 #elif defined(__CELLOS_LV2__)
@@ -153,8 +156,7 @@ static void *thread_wrap(void *data_)
  * @userdata                : pointer to userdata that will be made
  *                            available in thread entry callback function
  *
- * Create a new thread using the operating system's default thread
- * priority.
+ * Create a new thread.
  *
  * Returns: pointer to new thread if successful, otherwise NULL.
  */
@@ -162,6 +164,11 @@ sthread_t *sthread_create(void (*thread_func)(void*), void *userdata)
 {
 	return sthread_create_with_priority(thread_func, userdata, 0);
 }
+
+/* TODO/FIXME - this needs to be implemented for Switch */
+#if !defined(SWITCH) && !defined(USE_WIN32_THREADS)
+#define HAVE_THREAD_ATTR
+#endif
 
 /**
  * sthread_create_with_priority:
@@ -180,8 +187,11 @@ sthread_t *sthread_create(void (*thread_func)(void*), void *userdata)
  */
 sthread_t *sthread_create_with_priority(void (*thread_func)(void*), void *userdata, int thread_priority)
 {
-   bool thread_created      = false;
+#ifdef HAVE_THREAD_ATTR
+   pthread_attr_t thread_attr;
    bool thread_attr_needed  = false;
+#endif
+   bool thread_created      = false;
    struct thread_data *data = NULL;
    sthread_t *thread        = (sthread_t*)calloc(1, sizeof(*thread));
 
@@ -192,16 +202,17 @@ sthread_t *sthread_create_with_priority(void (*thread_func)(void*), void *userda
    if (!data)
       goto error;
 
-   data->func = thread_func;
-   data->userdata = userdata;
+   data->func               = thread_func;
+   data->userdata           = userdata;
 
 #ifdef USE_WIN32_THREADS
-   thread->thread = CreateThread(NULL, 0, thread_wrap, data, 0, &thread->id);
-   thread_created = !!thread->thread;
+   thread->thread           = CreateThread(NULL, 0, thread_wrap, data, 0, &thread->id);
+   thread_created           = !!thread->thread;
 #else
-   pthread_attr_t thread_attr;
+
+#ifdef HAVE_THREAD_ATTR
    pthread_attr_init(&thread_attr);
-	
+
    if ( (thread_priority >= 1) && (thread_priority <= 100) )
    {
       struct sched_param sp;
@@ -209,31 +220,30 @@ sthread_t *sthread_create_with_priority(void (*thread_func)(void*), void *userda
       sp.sched_priority = thread_priority;
       pthread_attr_setschedpolicy(&thread_attr, SCHED_RR);
       pthread_attr_setschedparam(&thread_attr, &sp);
-	   
+
       thread_attr_needed = true;
    }
-	
+#endif
+
 #if defined(VITA)
    pthread_attr_setstacksize(&thread_attr , 0x10000 );
    thread_attr_needed = true;
 #endif
-   
+
+#ifdef HAVE_THREAD_ATTR
    if (thread_attr_needed)
-   {
       thread_created = pthread_create(&thread->id, &thread_attr, thread_wrap, data) == 0;
-   }
    else
-   {
+#endif
       thread_created = pthread_create(&thread->id, NULL, thread_wrap, data) == 0;
-   }
-	
+
+#ifdef HAVE_THREAD_ATTR
    pthread_attr_destroy(&thread_attr);
 #endif
+#endif
 
-   if (!thread_created)
-      goto error;
-
-   return thread;
+   if (thread_created)
+      return thread;
 
 error:
    if (data)

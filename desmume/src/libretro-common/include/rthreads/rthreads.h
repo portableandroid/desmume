@@ -46,8 +46,7 @@ typedef unsigned sthread_tls_t;
  * @userdata                : pointer to userdata that will be made
  *                            available in thread entry callback function
  *
- * Create a new thread using the operating system's default thread
- * priority.
+ * Create a new thread.
  *
  * Returns: pointer to new thread if successful, otherwise NULL.
  */
