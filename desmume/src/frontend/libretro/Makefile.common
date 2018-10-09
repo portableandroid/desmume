@@ -81,6 +81,7 @@ ifeq ($(DESMUME_OPENGL_CORE),1)
 SOURCES_CXX += $(CORE_DIR)/OGLRender_3_2.cpp 
 endif
 
+ifeq ($(HAVE_LIBFAT),1)
 SOURCES_CXX += \
 	$(CORE_DIR)/utils/libfat/partition.cpp \
 	$(CORE_DIR)/utils/libfat/cache.cpp \
@@ -93,6 +94,7 @@ SOURCES_CXX += \
 	$(CORE_DIR)/utils/libfat/libfat.cpp \
 	$(CORE_DIR)/utils/libfat/libfat_public_api.cpp \
 	$(CORE_DIR)/utils/libfat/lock.cpp
+endif
 
 # We can only stop excluding this for Vita once we have more
 # filesystem functions implemented 

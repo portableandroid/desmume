@@ -1,4 +1,5 @@
 DEBUG=0
+HAVE_LIBFAT=1
 
 SPACE :=
 SPACE := $(SPACE) $(SPACE)
@@ -167,6 +168,7 @@ else ifeq ($(platform), sncps3)
 else ifeq ($(platform), libnx)
     include $(DEVKITPRO)/libnx/switch_rules
     EXT=a
+	 HAVE_LIBFAT=0
     TARGET := $(TARGET_NAME)_libretro_$(platform).$(EXT)
     DEFINES := -DSWITCH=1 -U__linux__ -U__linux -DRARCH_INTERNAL -DIOAPI_NO_64
     CFLAGS	:=	 $(DEFINES) -g -O3 \
