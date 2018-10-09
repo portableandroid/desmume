@@ -6,6 +6,7 @@ LIBRETRO_DIR := $(CORE_DIR)/frontend/libretro
 JIT             :=
 DESMUME_JIT     := 0
 DESMUME_JIT_ARM := 0
+HAVE_LIBFAT     := 1
 
 ifeq ($(TARGET_ARCH),arm)
   DESMUME_JIT_ARM := 1
