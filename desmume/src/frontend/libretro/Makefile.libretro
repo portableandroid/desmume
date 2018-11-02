@@ -109,9 +109,6 @@ else ifeq ($(platform), classic_armv7_a7)
 	ARCH = arm
 	BUILTIN_GPU = neon
 	USE_DYNAREC = 1
-    CXXFLAGS += -DHAVE_OPENGL
-    DESMUME_OPENGL = 1
-    DESMUME_OPENGL_CORE = 1
     DESMUME_JIT_ARM = 1
     CXXFLAGS += -DARM
 	ifeq ($(shell echo `$(CC) -dumpversion` "< 4.9" | bc -l), 1)
