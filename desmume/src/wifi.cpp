@@ -3210,7 +3210,7 @@ void DummyPCapInterface::breakloop(void *dev)
 	// Do nothing.
 }
 
-#ifndef HOST_WINDOWS
+#if !defined(HOST_WINDOWS) && !defined(__LIBRETRO__)
 
 int POSIXPCapInterface::findalldevs(void **alldevs, char *errbuf)
 {
@@ -3779,14 +3779,14 @@ WifiHandler::WifiHandler()
 	
 	_packetCaptureFile = NULL;
 	
-#ifndef HOST_WINDOWS
+#if !defined(HOST_WINDOWS) && !defined(__LIBRETRO__)
 	_pcap = new POSIXPCapInterface;
 	_isSocketsSupported = true;
 #else
 	_pcap = &dummyPCapInterface;
 	_isSocketsSupported = false;
 #endif
-	
+
 	WIFI_initCRC32Table();
 	Reset();
 }

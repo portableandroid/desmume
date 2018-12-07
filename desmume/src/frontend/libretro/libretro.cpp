@@ -92,7 +92,6 @@ static int hybrid_layout_scale = 1;
 static bool hybrid_layout_showbothscreens = true;
 static bool hybrid_cursor_always_smallscreen = true;
 static uint16_t pointer_colour = 0xFFFF;
-int multisample_level = 1;
 static uint32_t pointer_color_32 = 0xFFFFFFFF;
 static int bpp = 2;
 static int current_max_width = 0;
@@ -755,11 +754,11 @@ static void check_variables(bool first_boot)
 
                   strncpy(CommonSettings.ARM7BIOS, bios7_loc.c_str(), 256);
                   strncpy(CommonSettings.ARM9BIOS, bios9_loc.c_str(), 256);
-                  strncpy(CommonSettings.Firmware, firmware_loc.c_str(), 256);
+                  strncpy(CommonSettings.ExtFirmwarePath, firmware_loc.c_str(), 256);
 
                   CommonSettings.ARM7BIOS[255] = '\0';
                   CommonSettings.ARM9BIOS[255] = '\0';
-                  CommonSettings.Firmware[255] = '\0';
+                  CommonSettings.ExtFirmwarePath[255] = '\0';
               }
 
               CommonSettings.UseExtBIOS = true;
@@ -1072,23 +1071,16 @@ static void check_variables(bool first_boot)
    {
       if (!strcmp(var.value, "disabled"))
       {
-         CommonSettings.GFX3D_Renderer_Multisample = false;
-         multisample_level = 1;
+         CommonSettings.GFX3D_Renderer_MultisampleSize = 1;
       }
       else
       {
          int newvalue = atoi(var.value);
-         CommonSettings.GFX3D_Renderer_Multisample = true;
-
-         if (newvalue != multisample_level && !first_boot)
-         {
-            need_framebuffer_reset = true;
-         }
-         multisample_level = newvalue;
+         CommonSettings.GFX3D_Renderer_MultisampleSize = newvalue;;
       }
    }
    else
-      CommonSettings.GFX3D_Renderer_Multisample = false;
+      CommonSettings.GFX3D_Renderer_MultisampleSize = 1;
 
    var.key = "desmume_gfx_highres_interpolate_color";
 
@@ -1538,14 +1530,10 @@ void retro_init (void)
     check_variables(true);
 
     // Init DeSmuME
-    struct NDS_fw_config_data fw_config;
-    NDS_FillDefaultFirmwareConfigData(&fw_config);
-    fw_config.language = firmwareLanguage;
+    NDS_SetupDefaultFirmware();
+    CommonSettings.fwConfig.language = firmwareLanguage;
 
     //addonsChangePak(NDS_ADDON_NONE);
-    NDS_Init();
-    SPU_ChangeSoundCore(0, 0);
-    SPU_SetSynchMode(ESynchMode_Synchronous, ESynchMethod_N);
 
     const char *nickname;
     if (environ_cb(RETRO_ENVIRONMENT_GET_USERNAME, &nickname) && nickname)
@@ -1558,12 +1546,14 @@ void retro_init (void)
         if (len > 0)
         {
             for (int i = 0; i < len; i++)
-                fw_config.nickname[i] = nickname[i];
-            fw_config.nickname_len = len;
+                CommonSettings.fwConfig.nickname[i] = nickname[i];
+            CommonSettings.fwConfig.nicknameLength = len;
         }
     }
 
-    NDS_CreateDummyFirmware(&fw_config);
+    NDS_Init();
+    SPU_ChangeSoundCore(0, 0);
+    SPU_SetSynchMode(ESynchMode_Synchronous, ESynchMethod_N);
 
     NDS_3D_ChangeCore(GPU3D_SOFTRASTERIZER);
     GPU->SetCustomFramebufferSize(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT);
