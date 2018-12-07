@@ -68,7 +68,7 @@
 #endif
 
 #if defined(_WIN32) && defined(__LIBRETRO__)
-#include "frontend/windows/winpcap.h"
+#include "frontend/windows/winpcap/pcap.h"
 #else
 #include <pcap.h>
 #endif
