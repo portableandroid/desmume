@@ -89,7 +89,7 @@ void* STDROMReaderInit(const char* filename)
 		return 0;
 #endif
 	
-#ifdef WIN32
+#if defined(WIN32) && !defined(__LIBRETRO__)
 	FILE* inf = _wfopen(mbstowcs((std::string)filename).c_str(),L"rb");
 #else
 	FILE* inf = fopen(filename, "rb");
