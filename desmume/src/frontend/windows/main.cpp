@@ -91,6 +91,7 @@
 #include "frontend/modules/ImageOut.h"
 #include "winutil.h"
 #include "ogl.h"
+#include "display.h"
 
 //tools and dialogs
 #include "pathsettings.h"
@@ -294,24 +295,11 @@ msgBoxInterface msgBoxWnd = {
 };
 //====================== Dialogs end
 
-
-#ifdef EXPERIMENTAL_WIFI_COMM
-bool bSocketsAvailable = false;
 #include "winpcap.h"
-#endif
-
-VideoInfo video;
 
 #ifndef PUBLIC_RELEASE
 #define DEVELOPER_MENU_ITEMS
 #endif
-
-const int kGapNone = 0;
-const int kGapBorder = 5;
-const int kGapNDS = 64; // extremely tilted (but some games seem to use this value)
-const int kGapNDS2 = 90; // more normal viewing angle
-const int kScale1point5x = 65535;
-const int kScale2point5x = 65534;
 
 static BOOL OpenCore(const char* filename);
 BOOL Mic_DeInit_Physical();
@@ -328,8 +316,6 @@ bool start_paused;
 extern bool killStylusTopScreen;
 extern bool killStylusOffScreen;
 
-int gpu_bpp = 18;
-
 extern LRESULT CALLBACK RamSearchProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void InitRamSearch();
 void FilterUpdate(HWND hwnd, bool user=true);
@@ -344,49 +330,11 @@ Lock::Lock() : m_cs(&win_execute_sync) { EnterCriticalSection(m_cs); }
 Lock::Lock(CRITICAL_SECTION& cs) : m_cs(&cs) { EnterCriticalSection(m_cs); }
 Lock::~Lock() { LeaveCriticalSection(m_cs); }
 
-//====================== DirectDraw
-const char	*DDerrors[] = { "no errors",
-							"Unable to initialize DirectDraw", 
-							"Unable to set DirectDraw Cooperative Level",
-							"Unable to create DirectDraw primary surface",
-							"Unable to set DirectDraw clipper"};
-struct DDRAW
-{
-	DDRAW():
-		handle(NULL), clip(NULL)
-	{
-		surface.primary = NULL;
-		surface.back = NULL;
-		memset(&surfDesc, 0, sizeof(surfDesc));
-		memset(&surfDescBack, 0, sizeof(surfDescBack));
-	}
-
-	u32	create(HWND hwnd);
-	bool release();
-	bool createSurfaces(HWND hwnd);
-	bool createBackSurface(int width, int height);
-	bool lock();
-	bool unlock();
-	bool blt(LPRECT dst, LPRECT src);
-	bool OK();
-
-	LPDIRECTDRAW7			handle;
-	struct
-	{
-		LPDIRECTDRAWSURFACE7	primary;
-		LPDIRECTDRAWSURFACE7	back;
-	} surface;
-
-	DDSURFACEDESC2			surfDesc;
-	DDSURFACEDESC2			surfDescBack;
-	LPDIRECTDRAWCLIPPER		clip;
-} ddraw;
-
 //===================== Input vars
 #define WM_CUSTKEYDOWN	(WM_USER+50)
 #define WM_CUSTKEYUP	(WM_USER+51)
 
-#define WM_CUSTINVOKE	(WM_USER+52)
+//#define WM_CUSTINVOKE	(WM_USER+52)
 
 #ifndef __WISPSHRD_H
 #define WM_TABLET_DEFBASE                    0x02C0
@@ -424,8 +372,6 @@ bool		gConsoleTopmost = false;
 //HDC  hdc;
 HACCEL hAccel;
 HINSTANCE hAppInst = NULL;
-RECT FullScreenRect, MainScreenRect, SubScreenRect, GapRect;
-RECT MainScreenSrcRect, SubScreenSrcRect;
 int WndX = 0;
 int WndY = 0;
 
@@ -458,28 +404,11 @@ volatile bool paused = true;
 volatile BOOL pausedByMinimize = FALSE;
 u32 glock = 0;
 
-// Scanline filter parameters. The first set is from commandline.cpp, the second
-// set is externed to scanline.cpp.
-// TODO: When videofilter.cpp becomes Windows-friendly, remove the second set of
-// variables, as they will no longer be necessary at that point.
-extern int _scanline_filter_a;
-extern int _scanline_filter_b;
-extern int _scanline_filter_c;
-extern int _scanline_filter_d;
-int scanline_filter_a = 0;
-int scanline_filter_b = 2;
-int scanline_filter_c = 2;
-int scanline_filter_d = 4;
-
 BOOL finished = FALSE;
 bool romloaded = false;
 
 void SetScreenGap(int gap);
 
-bool ForceRatio = true;
-bool PadToInteger = false;
-bool SeparationBorderDrag = true;
-int ScreenGapColor = 0xFFFFFF;
 float DefaultWidth;
 float DefaultHeight;
 float widthTradeOff;
@@ -494,6 +423,13 @@ extern bool userTouchesScreen;
 static int sndcoretype=SNDCORE_DIRECTX;
 static int sndbuffersize=DESMUME_SAMPLE_RATE*8/60;
 int sndvolume=100;
+
+const int possibleMSAA[] = {0, 2, 4, 8, 16, 32};
+const int possibleBPP[] = {15, 18, 24};
+const int possibleTexScale[] = {1, 2, 4};
+
+int maxSamples = 0;
+bool didGetMaxSamples = false;
 
 SoundInterface_struct *SNDCoreList[] = {
 	&SNDDummy,
@@ -511,35 +447,11 @@ GPU3DInterface *core3DList[] = {
 };
 
 bool autoframeskipenab=1;
-int frameskiprate=0;
-int lastskiprate=0;
-int emu_paused = 0;
-bool frameAdvance = false;
 bool continuousframeAdvancing = false;
 
 unsigned short windowSize = 0;
-
-float screenSizeRatio = 1.0f;
-bool vCenterResizedScr = true;
-
-/*const u32 gapColors[16] = {
-	Color::Gray,
-	Color::Brown,
-	Color::Red,
-	Color::Pink,
-	Color::Orange,
-	Color::Yellow,
-	Color::LightGreen,
-	Color::Lime,
-	Color::Green,
-	Color::SeaGreen,
-	Color::SkyBlue,
-	Color::Blue,
-	Color::DarkBlue,
-	Color::DarkViolet,
-	Color::Purple,
-	Color::Fuchsia
-};*/
+bool fsWindow = false;
+bool autoHideCursor = false;
 
 class GPUEventHandlerWindows : public GPUEventHandlerDefault
 {
@@ -555,6 +467,55 @@ public:
 	}
 };
 
+class WinPCapInterface : public ClientPCapInterface
+{
+public:
+	virtual int findalldevs(void **alldevs, char *errbuf)
+	{
+		return _pcap_findalldevs((pcap_if_t **)alldevs, errbuf);
+	}
+
+	virtual void freealldevs(void *alldevs)
+	{
+		_pcap_freealldevs((pcap_if_t *)alldevs);
+	}
+
+	virtual void* open(const char *source, int snaplen, int flags, int readtimeout, char *errbuf)
+	{
+		return _pcap_open_live(source, snaplen, flags, readtimeout, errbuf);
+	}
+
+	virtual void close(void *dev)
+	{
+		_pcap_close((pcap_t *)dev);
+	}
+
+	virtual int setnonblock(void *dev, int nonblock, char *errbuf)
+	{
+		return _pcap_setnonblock((pcap_t *)dev, nonblock, errbuf);
+	}
+
+	virtual int sendpacket(void *dev, const void *data, int len)
+	{
+		return _pcap_sendpacket((pcap_t *)dev, (u_char *)data, len);
+	}
+
+	virtual int dispatch(void *dev, int num, void *callback, void *userdata)
+	{
+		if (callback == NULL)
+		{
+			return -1;
+		}
+
+		return _pcap_dispatch((pcap_t *)dev, num, (pcap_handler)callback, (u_char *)userdata);
+	}
+	
+	virtual void breakloop(void *dev)
+	{
+		_pcap_breakloop((pcap_t *)dev);
+	}
+};
+
 GPUEventHandlerWindows *WinGPUEvent = NULL;
 
 LRESULT CALLBACK HUDFontSettingsDlgProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp);
@@ -562,9 +523,7 @@ LRESULT CALLBACK GFX3DSettingsDlgProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp);
 LRESULT CALLBACK SoundSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK EmulationSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK MicrophoneSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-#ifdef EXPERIMENTAL_WIFI_COMM
 LRESULT CALLBACK WifiSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-#endif
 
 //struct configured_features {
 //	u16 arm9_gdb_port;
@@ -654,8 +613,12 @@ void ScaleScreen(float factor, bool user)
 {
 	if(user) // have to exit maximized mode if the user told us to set a specific window size
 	{
-		bool maximized = IsZoomed(MainWindow->getHWnd())==TRUE;
-		if(maximized) ShowWindow(MainWindow->getHWnd(),SW_NORMAL);
+		HWND hwnd = MainWindow->getHWnd();
+		if (IsZoomed(hwnd) || fsWindow)
+		{
+			RestoreWindow(hwnd);
+			windowSize = factor;
+		}
 	}
 
 	if(windowSize == 0)
@@ -732,23 +695,6 @@ void SetMinWindowSize()
 		MainWindow->setMinSize(video.rotatedwidth(), video.rotatedheight());
 	else
 		MainWindow->setMinSize(video.rotatedwidthgap(), video.rotatedheightgap());
-}
-
-static void GetNdsScreenRect(RECT* r)
-{
-	RECT zero; 
-	SetRect(&zero,0,0,0,0);
-	if(zero == MainScreenRect) *r = SubScreenRect;
-	else if(zero == SubScreenRect || video.layout == 2) *r = MainScreenRect;
-	else
-	{
-		RECT* dstRects [2] = {&MainScreenRect, &SubScreenRect};
-		int left = min(dstRects[0]->left,dstRects[1]->left);
-		int top = min(dstRects[0]->top,dstRects[1]->top);
-		int right = max(dstRects[0]->right,dstRects[1]->right);
-		int bottom = max(dstRects[0]->bottom,dstRects[1]->bottom);
-		SetRect(r,left,top,right,bottom);
-	}
 }
 
 void UnscaleScreenCoords(s32& x, s32& y)
@@ -922,23 +868,14 @@ void ToDSScreenRelativeCoords(s32& x, s32& y, int whichScreen)
 	}
 }
 
-// END Rotation definitions
-
 //-----window style handling----
-const u32 DISPMETHOD_DDRAW_HW = 1;
-const u32 DISPMETHOD_DDRAW_SW = 2;
-const u32 DISPMETHOD_OPENGL = 3;
-
 const u32 DWS_NORMAL = 0;
 const u32 DWS_ALWAYSONTOP = 1;
 const u32 DWS_LOCKDOWN = 2;
 const u32 DWS_FULLSCREEN = 4;
 const u32 DWS_VSYNC = 8;
-const u32 DWS_DDRAW_SW = 16;
-const u32 DWS_DDRAW_HW = 32;
-const u32 DWS_OPENGL = 64;
-const u32 DWS_DISPMETHODS =  (DWS_DDRAW_SW|DWS_DDRAW_HW|DWS_OPENGL);
-const u32 DWS_FILTER = 128;
+const u32 DWS_FS_MENU = 256;
+const u32 DWS_FS_WINDOW = 512;
 
 static u32 currWindowStyle = DWS_NORMAL;
 void SetStyle(u32 dws);
@@ -947,15 +884,77 @@ static u32 GetStyle() { return currWindowStyle; }
 static void ToggleFullscreen()
 {
 	u32 style = GetStyle();
-	style ^= DWS_FULLSCREEN;
-	SetStyle(style);
+	HWND hwnd = MainWindow->getHWnd();
+
 	if(style&DWS_FULLSCREEN)
-		ShowWindow(MainWindow->getHWnd(),SW_MAXIMIZE);
-	else ShowWindow(MainWindow->getHWnd(),SW_NORMAL);
+		RestoreWindow(hwnd);
+	else ShowFullScreen(hwnd);
 }
 //---------
 
+void SaveWindowSizePos(HWND hwnd)
+{
+	SaveWindowPos(hwnd);
+	SaveWindowSize(hwnd);
+	WritePrivateProfileInt("Video", "Window Size", windowSize, IniName);
+}
 
+void RestoreWindow(HWND hwnd)
+{
+	fsWindow = false;
+	u32 style = GetStyle();
+
+	if (style & DWS_FULLSCREEN)
+	{
+		style &= ~DWS_FULLSCREEN;
+		SetStyle(style);
+		ShowWindow(hwnd, SW_NORMAL);
+
+		windowSize = GetPrivateProfileInt("Video", "Window Size", 0, IniName);
+		WndX = GetPrivateProfileInt("Video", "WindowPosX", CW_USEDEFAULT, IniName);
+		WndY = GetPrivateProfileInt("Video", "WindowPosY", CW_USEDEFAULT, IniName);
+
+		RECT rc;
+		rc.left = WndX;
+		rc.top = WndY;
+		rc.right = rc.left + GetPrivateProfileInt("Video", "Window width", GPU_FRAMEBUFFER_NATIVE_WIDTH, IniName);
+		rc.bottom = rc.top + GetPrivateProfileInt("Video", "Window height", GPU_FRAMEBUFFER_NATIVE_HEIGHT * 2, IniName);
+
+		AdjustWindowRect(&rc, GetWindowLong(hwnd, GWL_STYLE), true);
+		SetWindowPos(hwnd, 0, WndX, WndY, rc.right - rc.left, rc.bottom - rc.top, SWP_NOOWNERZORDER | SWP_NOZORDER);
+	}
+	else
+		ShowWindow(hwnd, SW_NORMAL);
+}
+
+void ShowFullScreen(HWND hwnd)
+{
+	SaveWindowSizePos(hwnd);
+
+	u32 style = GetStyle();
+	style |= DWS_FULLSCREEN;
+	SetStyle(style);
+
+	if (style & DWS_FS_WINDOW)
+	{
+		windowSize = 0;
+		fsWindow = true;
+
+		HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+		MONITORINFO info;
+		info.cbSize = sizeof(MONITORINFO);
+		GetMonitorInfo(monitor, &info);
+		int monitor_width = info.rcMonitor.right - info.rcMonitor.left;
+		int monitor_height = info.rcMonitor.bottom - info.rcMonitor.top;
+
+		SetWindowPos(hwnd, 0, info.rcMonitor.left, info.rcMonitor.top, monitor_width, monitor_height, SWP_NOOWNERZORDER | SWP_NOZORDER);
+	}
+	else
+	{
+		fsWindow = false;
+		ShowWindow(hwnd, SW_MAXIMIZE);
+	}
+}
 
 static HMENU GetMenuItemParent(UINT itemId, HMENU hMenu = mainMenu)
 {
@@ -1033,345 +1032,6 @@ static void PopulateLuaSubmenu()
 	}
 }
 
-template<typename T> static void doRotate(void* dst)
-{
-	u8* buffer = (u8*)dst;
-	int size = video.size();
-	u32* src = (u32*)video.finalBuffer();
-	int width = video.width;
-	int height = video.height;
-	int pitch = ddraw.surfDescBack.lPitch;
-
-	switch(video.rotation)
-	{
-	case 0:
-	case 180:
-		{
-			if(pitch == 1024)
-			{
-				if(video.rotation==0)
-					if(sizeof(T) == sizeof(u32))
-						memcpy(buffer, src, size * sizeof(u32));
-					else
-						for(int i = 0; i < size; i++)
-							((T*)buffer)[i] = src[i];
-				else // if(video.rotation==180)
-					for(int i = 0, j=size-1; j>=0; i++,j--)
-						((T*)buffer)[i] = src[j];
-			}
-			else
-			{
-				if(video.rotation==0)
-					if(sizeof(T) != sizeof(u32))
-						for(int y = 0; y < height; y++)
-						{
-							for(int x = 0; x < width; x++)
-								((T*)buffer)[x] = src[(y * width) + x];
-
-							buffer += pitch;
-						}
-					else
-						for(int y = 0; y < height; y++)
-						{
-							memcpy(buffer, &src[y * width], width * sizeof(u32));
-							buffer += pitch;
-						}
-				else // if(video.rotation==180)
-					for(int y = 0; y < height; y++)
-					{
-						for(int x = 0; x < width; x++)
-							((T*)buffer)[x] = src[height*width - (y * width) - x - 1];
-
-						buffer += pitch;
-					}
-			}
-		}
-		break;
-	case 90:
-	case 270:
-		{
-			if(video.rotation == 90)
-				for(int y = 0; y < width; y++)
-				{
-					for(int x = 0; x < height; x++)
-						((T*)buffer)[x] = src[(((height-1)-x) * width) + y];
-
-					buffer += pitch;
-				}
-			else
-				for(int y = 0; y < width; y++)
-				{
-					for(int x = 0; x < height; x++)
-						((T*)buffer)[x] = src[((x) * width) + (width-1) - y];
-
-					buffer += pitch;
-				}
-		}
-		break;
-	}
-}
-
-struct DisplayLayoutInfo
-{
-	int vx,vy,vw,vh;
-	float widthScale, heightScale;
-	int bufferWidth, bufferHeight;
-};
-
-//performs aspect ratio letterboxing correction and integer clamping
-DisplayLayoutInfo CalculateDisplayLayout(RECT rcClient, bool maintainAspect, bool maintainInteger, int targetWidth, int targetHeight)
-{
-	DisplayLayoutInfo ret;
-
-	//do maths on the viewport and the native resolution and the user settings to get a display rectangle
-	SIZE sz = { rcClient.right - rcClient.left, rcClient.bottom - rcClient.top };
-	
-	float widthScale = (float)sz.cx / targetWidth;
-	float heightScale = (float)sz.cy / targetHeight;
-	if(maintainAspect)
-	{
-		if(widthScale > heightScale) widthScale = heightScale;
-		if(heightScale > widthScale) heightScale = widthScale;
-	}
-	if(maintainInteger)
-	{
-		widthScale = floorf(widthScale);
-		heightScale = floorf(heightScale);
-	}
-	ret.vw = (int)(widthScale * targetWidth);
-	ret.vh = (int)(heightScale * targetHeight);
-	ret.vx = (sz.cx - ret.vw)/2;
-	ret.vy = (sz.cy - ret.vh)/2;
-	ret.widthScale = widthScale;
-	ret.heightScale = heightScale;
-	ret.bufferWidth = sz.cx;
-	ret.bufferHeight = sz.cy;
-
-	return ret;
-}
-
-//reformulates CalculateDisplayLayout() into a format more convenient for this purpose
-RECT CalculateDisplayLayoutWrapper(RECT rcClient, int targetWidth, int targetHeight, int tbHeight, bool maximized)
-{
-	bool maintainInteger = !!PadToInteger;
-	bool maintainAspect = !!ForceRatio;
-
-	if(maintainInteger) maintainAspect = true;
-
-	//nothing to do here if maintain aspect isnt chosen
-	if(!maintainAspect) return rcClient;
-
-	RECT rc = { rcClient.left, rcClient.top + tbHeight, rcClient.right, rcClient.bottom };
-	DisplayLayoutInfo dli = CalculateDisplayLayout(rc, maintainAspect, maintainInteger, targetWidth, targetHeight);
-	rc.left = rcClient.left + dli.vx;
-	rc.top = rcClient.top + dli.vy;
-	rc.right = rc.left + dli.vw;
-	rc.bottom = rc.top + dli.vh + tbHeight;
-	return rc;
-}
-
-void UpdateWndRects(HWND hwnd, RECT* newClientRect = NULL)
-{
-	POINT ptClient;
-	RECT rc;
-
-	bool maximized = IsZoomed(hwnd)!=FALSE;
-
-	int wndWidth, wndHeight;
-	int defHeight = video.height;
-	if(video.layout == 0)
-		defHeight += video.scaledscreengap();
-	float ratio;
-	int oneScreenHeight, gapHeight;
-	int tbheight;
-
-	//if we're in the middle of resizing the window, GetClientRect will return the old rect
-	if (newClientRect)
-		rc = RECT(*newClientRect);
-	else
-		GetClientRect(hwnd, &rc);
-
-	if(maximized)
-		rc = FullScreenRect;
-	
-	tbheight = MainWindowToolbar->GetHeight();
-	
-	if (video.layout == 1) //horizontal
-	{
-		rc = CalculateDisplayLayoutWrapper(rc, (int)((float)GPU_FRAMEBUFFER_NATIVE_WIDTH * 2 / screenSizeRatio), GPU_FRAMEBUFFER_NATIVE_HEIGHT, tbheight, maximized);
-		
-		wndWidth = (rc.bottom - rc.top) - tbheight;
-		wndHeight = (rc.right - rc.left);
-
-		ratio = ((float)wndHeight / (float)512);
-		oneScreenHeight = (int)((float)GPU_FRAMEBUFFER_NATIVE_WIDTH * ratio);
-		int oneScreenWidth = (int)((float)GPU_FRAMEBUFFER_NATIVE_HEIGHT * ratio);
-		int vResizedScrOffset = 0;
-
-		// Main screen
-		ptClient.x = rc.left;
-		ptClient.y = rc.top;
-		ClientToScreen(hwnd, &ptClient);
-		MainScreenRect.left = ptClient.x;
-		MainScreenRect.top = ptClient.y;
-		ptClient.x = (rc.left + oneScreenHeight * screenSizeRatio);
-		ptClient.y = (rc.top + wndWidth);
-		ClientToScreen(hwnd, &ptClient);
-		MainScreenRect.right = ptClient.x;
-		MainScreenRect.bottom = ptClient.y;
-
-		// Sub screen
-		ptClient.x = (rc.left + oneScreenHeight * screenSizeRatio);
-		if(vCenterResizedScr && ForceRatio)
-			vResizedScrOffset = (wndWidth - oneScreenWidth * (2 - screenSizeRatio)) / 2;
-		ptClient.y = rc.top + vResizedScrOffset;
-		ClientToScreen(hwnd, &ptClient);
-		SubScreenRect.left = ptClient.x;
-		SubScreenRect.top = ptClient.y;
-		ptClient.x = (rc.left + oneScreenHeight * 2);
-		if(ForceRatio)
-			ptClient.y = (rc.top + vResizedScrOffset + oneScreenWidth * (2 - screenSizeRatio));
-		else 
-			ptClient.y = (rc.top + wndWidth);
-		ClientToScreen(hwnd, &ptClient);
-		SubScreenRect.right = ptClient.x;
-		SubScreenRect.bottom = ptClient.y;
-	}
-	else
-	if (video.layout == 2) //one screen
-	{
-		rc = CalculateDisplayLayoutWrapper(rc, GPU_FRAMEBUFFER_NATIVE_WIDTH, GPU_FRAMEBUFFER_NATIVE_HEIGHT, tbheight, maximized);
-
-		wndWidth = (rc.bottom - rc.top) - tbheight;
-		wndHeight = (rc.right - rc.left);
-
-		ratio = ((float)wndHeight / (float)defHeight);
-		oneScreenHeight = (int)((video.height) * ratio);
-
-		// Main screen
-		ptClient.x = rc.left;
-		ptClient.y = rc.top;
-		ClientToScreen(hwnd, &ptClient);
-		MainScreenRect.left = ptClient.x;
-		MainScreenRect.top = ptClient.y;
-		ptClient.x = (rc.left + oneScreenHeight);
-		ptClient.y = (rc.top + wndWidth);
-		ClientToScreen(hwnd, &ptClient);
-		MainScreenRect.right = ptClient.x;
-		MainScreenRect.bottom = ptClient.y;
-		SetRectEmpty(&SubScreenRect);
-	}
-	else
-	if (video.layout == 0) //vertical
-	{
-		//apply logic to correct things if forced integer is selected
-		if((video.rotation == 90) || (video.rotation == 270))
-		{
-			rc = CalculateDisplayLayoutWrapper(rc, (GPU_FRAMEBUFFER_NATIVE_HEIGHT*2) + video.screengap, GPU_FRAMEBUFFER_NATIVE_WIDTH, tbheight, maximized);
-		}
-		else
-		{
-			rc = CalculateDisplayLayoutWrapper(rc, GPU_FRAMEBUFFER_NATIVE_WIDTH, (GPU_FRAMEBUFFER_NATIVE_HEIGHT*2) + video.screengap, tbheight, maximized);
-		}
-
-		if((video.rotation == 90) || (video.rotation == 270))
-		{
-			wndWidth = (rc.bottom - rc.top) - tbheight;
-			wndHeight = (rc.right - rc.left);
-		}
-		else
-		{
-			wndWidth = (rc.right - rc.left);
-			wndHeight = (rc.bottom - rc.top) - tbheight;
-		}
-
-		ratio = ((float)wndHeight / (float)defHeight);
-
-		oneScreenHeight = (int)((video.height/2) * ratio);
-		gapHeight = (wndHeight - (oneScreenHeight * 2));
-
-		if((video.rotation == 90) || (video.rotation == 270))
-		{
-			// Main screen
-			ptClient.x = rc.left;
-			ptClient.y = rc.top;
-			ClientToScreen(hwnd, &ptClient);
-			MainScreenRect.left = ptClient.x;
-			MainScreenRect.top = ptClient.y;
-			ptClient.x = (rc.left + oneScreenHeight);
-			ptClient.y = (rc.top + wndWidth);
-			ClientToScreen(hwnd, &ptClient);
-			MainScreenRect.right = ptClient.x;
-			MainScreenRect.bottom = ptClient.y;
-
-			//if there was no specified screen gap, extend the top screen to cover the extra column
-			if(video.screengap == 0) MainScreenRect.right += gapHeight;
-
-			// Sub screen
-			ptClient.x = (rc.left + oneScreenHeight + gapHeight);
-			ptClient.y = rc.top;
-			ClientToScreen(hwnd, &ptClient);
-			SubScreenRect.left = ptClient.x;
-			SubScreenRect.top = ptClient.y;
-			ptClient.x = (rc.left + oneScreenHeight + gapHeight + oneScreenHeight);
-			ptClient.y = (rc.top + wndWidth);
-			ClientToScreen(hwnd, &ptClient);
-			SubScreenRect.right = ptClient.x;
-			SubScreenRect.bottom = ptClient.y;
-
-			// Gap
-			GapRect.left = (rc.left + oneScreenHeight);
-			GapRect.top = rc.top;
-			GapRect.right = (rc.left + oneScreenHeight + gapHeight);
-			GapRect.bottom = (rc.top + wndWidth);
-		}
-		else
-		{
-
-
-			// Main screen
-			ptClient.x = rc.left;
-			ptClient.y = rc.top;
-			ClientToScreen(hwnd, &ptClient);
-			MainScreenRect.left = ptClient.x;
-			MainScreenRect.top = ptClient.y;
-			ptClient.x = (rc.left + wndWidth);
-			ptClient.y = (rc.top + oneScreenHeight);
-			ClientToScreen(hwnd, &ptClient);
-			MainScreenRect.right = ptClient.x;
-			MainScreenRect.bottom = ptClient.y;
-
-			//if there was no specified screen gap, extend the top screen to cover the extra row
-			if(video.screengap == 0) MainScreenRect.bottom += gapHeight;
-
-			// Sub screen
-			ptClient.x = rc.left;
-			ptClient.y = (rc.top + oneScreenHeight + gapHeight);
-			ClientToScreen(hwnd, &ptClient);
-			SubScreenRect.left = ptClient.x;
-			SubScreenRect.top = ptClient.y;
-			ptClient.x = (rc.left + wndWidth);
-			ptClient.y = (rc.top + oneScreenHeight + gapHeight + oneScreenHeight);
-			ClientToScreen(hwnd, &ptClient);
-			SubScreenRect.right = ptClient.x;
-			SubScreenRect.bottom = ptClient.y;
-
-			// Gap
-			GapRect.left = rc.left;
-			GapRect.top = (rc.top + oneScreenHeight);
-			GapRect.right = (rc.left + wndWidth);
-			GapRect.bottom = (rc.top + oneScreenHeight + gapHeight);
-		}
-	}
-
-	MainScreenRect.top += tbheight;
-	MainScreenRect.bottom += tbheight;
-	SubScreenRect.top += tbheight;
-	SubScreenRect.bottom += tbheight;
-	GapRect.top += tbheight;
-	GapRect.bottom += tbheight;
-}
-
 void FixAspectRatio();
 
 void LCDsSwap(int swapVal)
@@ -1383,20 +1043,24 @@ void LCDsSwap(int swapVal)
 	WritePrivateProfileInt("Video", "LCDsSwap", video.swap, IniName);
 }
 
-void doLCDsLayout()
+void doLCDsLayout(int videoLayout)
 {
 	HWND hwnd = MainWindow->getHWnd();
+	u32 style = GetStyle();
+	bool maximized = IsZoomed(hwnd) || fsWindow;
+	if (maximized)
+		RestoreWindow(hwnd);
 
-	bool maximized = IsZoomed(hwnd)==TRUE;
+	if (videoLayout > 2) videoLayout = 0;
 
-	if(maximized) ShowWindow(hwnd,SW_NORMAL);
-
-	if(video.layout != 0)
+	if(videoLayout != 0)
 	{
 		// rotation is not supported in the alternate layouts
 		if(video.rotation != 0)
 			SetRotate(hwnd, 0, false);
 	}
+
+	video.layout = videoLayout;
 
 	osd->singleScreen = (video.layout == 2);
 
@@ -1429,7 +1093,7 @@ void doLCDsLayout()
 
 		if (video.layout_old == 1)
 		{
-			newwidth = oldwidth / 2;
+			newwidth = oldwidth * screenSizeRatio / 2;
 			newheight = (oldheight * 2) + (video.screengap * oldheight / GPU_FRAMEBUFFER_NATIVE_HEIGHT);
 		}
 		else if (video.layout_old == 2)
@@ -1471,12 +1135,12 @@ void doLCDsLayout()
 		{
 			if (video.layout_old == 0)
 			{
-				newwidth = oldwidth * 2;
+				newwidth = oldwidth * 2 / screenSizeRatio;
 				newheight = (oldheight - scaledGap) / 2;
 			}
 			else if (video.layout_old == 2)
 			{
-				newwidth = oldwidth * 2;
+				newwidth = oldwidth * 2 / screenSizeRatio;
 				newheight = oldheight;
 			}
 			else
@@ -1497,7 +1161,7 @@ void doLCDsLayout()
 			}
 			else if (video.layout_old == 1)
 			{
-				newwidth = oldwidth / 2;
+				newwidth = oldwidth * screenSizeRatio / 2;
 				newheight = oldheight;
 			}
 			else
@@ -1533,653 +1197,15 @@ void doLCDsLayout()
 		if(video.rotation != video.rotation_userset)
 			SetRotate(hwnd, video.rotation_userset, false);
 	}
-
-	if(maximized) ShowWindow(hwnd,SW_MAXIMIZE);
-}
-
-#pragma pack(push,1)
-struct pix24
-{
-	u8 b,g,r;
-	FORCEINLINE pix24(u32 s) : b(s&0xFF), g((s&0xFF00)>>8), r((s&0xFF0000)>>16) {}
-};
-struct pix16
-{
-	u16 c;
-	FORCEINLINE pix16(u32 s) : c(((s&0xF8)>>3) | ((s&0xFC00)>>5) | ((s&0xF80000)>>8)) {}
-};
-struct pix15
-{
-	u16 c;
-	FORCEINLINE pix15(u32 s) : c(((s&0xF8)>>3) | ((s&0xF800)>>6) | ((s&0xF80000)>>9)) {}
-};
-#pragma pack(pop)
-
-static void DD_FillRect(LPDIRECTDRAWSURFACE7 surf, int left, int top, int right, int bottom, DWORD color)
-{
-	RECT r;
-	SetRect(&r,left,top,right,bottom);
-	DDBLTFX fx;
-	memset(&fx,0,sizeof(DDBLTFX));
-	fx.dwSize = sizeof(DDBLTFX);
-	//fx.dwFillColor = color;
-	fx.dwFillColor = 0; //color is just for debug
-	surf->Blt(&r,NULL,NULL,DDBLT_COLORFILL | DDBLT_WAIT,&fx);
-}
-
-struct GLDISPLAY
-{
-	HGLRC privateContext;
-	HDC privateDC;
-	bool init;
-	bool active;
-	bool wantVsync, haveVsync;
-
-	GLDISPLAY()
-		: init(false)
-		, active(false)
-		, wantVsync(false)
-		, haveVsync(false)
-	{
-	}
-
-	bool initialize()
-	{
-		//do we need to use another HDC?
-		if(init) return true;
-		init = initContext(MainWindow->getHWnd(),&privateContext);
-		setvsync(!!(GetStyle()&DWS_VSYNC));
-		return init;
-	}
-
-	void kill()
-	{
-		if(!init) return;
-		wglDeleteContext(privateContext);
-		privateContext = NULL;
-		haveVsync = false;
-		init = false;
-	}
-
-	bool begin()
-	{
-		DWORD myThread = GetCurrentThreadId();
-
-		//always use another context for display logic
-		//1. if this is a single threaded process (3d rendering and display in the main thread) then alternating contexts is benign
-		//2. if this is a multi threaded process (3d rendernig and display in other threads) then the display needs some context
-
-		if(!init)
-		{
-			if(!initialize()) return false;
-		}
-
-		privateDC = GetDC(MainWindow->getHWnd());
-		wglMakeCurrent(privateDC,privateContext);
-
-		//go ahead and sync the vsync setting while we have the context
-		if (wantVsync != haveVsync)
-			_setvsync();
-
-		return active = true;
-	}
-
-	void end()
-	{
-		wglMakeCurrent(NULL,privateContext);
-		ReleaseDC(MainWindow->getHWnd(),privateDC);
-		privateDC = NULL;
-		active = false;
-	}
-
-
-
-	//http://stackoverflow.com/questions/589064/how-to-enable-vertical-sync-in-opengl
-	bool WGLExtensionSupported(const char *extension_name)
-	{
-		// this is pointer to function which returns pointer to string with list of all wgl extensions
-		PFNWGLGETEXTENSIONSSTRINGEXTPROC _wglGetExtensionsStringEXT = NULL;
-
-		// determine pointer to wglGetExtensionsStringEXT function
-		_wglGetExtensionsStringEXT = (PFNWGLGETEXTENSIONSSTRINGEXTPROC)wglGetProcAddress("wglGetExtensionsStringEXT");
-
-		if (strstr(_wglGetExtensionsStringEXT(), extension_name) == NULL)
-		{
-			// string was not found
-			return false;
-		}
-
-		// extension is supported
-		return true;
-	}
-
-	void setvsync(bool vsync)
-	{
-		wantVsync = vsync;
-	}
-
-	void _setvsync()
-	{
-		//even if it doesn't work, we'll track it
-		haveVsync = wantVsync;
-
-		if (!WGLExtensionSupported("WGL_EXT_swap_control")) return;
-
-		//http://stackoverflow.com/questions/589064/how-to-enable-vertical-sync-in-opengl
-		PFNWGLSWAPINTERVALEXTPROC       wglSwapIntervalEXT = NULL;
-		PFNWGLGETSWAPINTERVALEXTPROC    wglGetSwapIntervalEXT = NULL;
-		{
-			// Extension is supported, init pointers.
-			wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC)wglGetProcAddress("wglSwapIntervalEXT");
-
-			// this is another function from WGL_EXT_swap_control extension
-			wglGetSwapIntervalEXT = (PFNWGLGETSWAPINTERVALEXTPROC)wglGetProcAddress("wglGetSwapIntervalEXT");
-		}
-
-		wglSwapIntervalEXT(wantVsync ? 1 : 0);
-	}
-
-	void showPage()
-	{
-		SwapBuffers(privateDC);
-	}
-} gldisplay;
-
-
-static void OGL_DrawTexture(RECT* srcRects, RECT* dstRects)
-{
-	//don't change the original rects
-	RECT sRects[2];
-	sRects[0] = RECT(srcRects[0]);
-	sRects[1] = RECT(srcRects[1]);
-
-	//use clear+scissor for gap
-	if (video.screengap > 0)
-	{
-		//adjust client rect into scissor rect (0,0 at bottomleft)
-		glScissor(dstRects[2].left, dstRects[2].bottom, dstRects[2].right - dstRects[2].left, dstRects[2].top - dstRects[2].bottom);
-
-		u32 color_rev = (u32)ScreenGapColor;
-		int r = (color_rev >> 0) & 0xFF;
-		int g = (color_rev >> 8) & 0xFF;
-		int b = (color_rev >> 16) & 0xFF;
-		glClearColor(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
-		glEnable(GL_SCISSOR_TEST);
-		glClear(GL_COLOR_BUFFER_BIT);
-		glDisable(GL_SCISSOR_TEST);
-	}
-
-	//draw two screens
-	glBegin(GL_QUADS);
-	for (int i = 0; i<2; i++)
-	{
-		//none of this makes any goddamn sense. dont even try.
-		int idx = i;
-		int ofs = 0;
-		switch (video.rotation)
-		{
-		case 0:
-			break;
-		case 90:
-			ofs = 3;
-			idx = 1 - i;
-			std::swap(sRects[idx].right, sRects[idx].bottom);
-			std::swap(sRects[idx].left, sRects[idx].top);
-			break;
-		case 180:
-			idx = 1 - i;
-			ofs = 2;
-			break;
-		case 270:
-			std::swap(sRects[idx].right, sRects[idx].bottom);
-			std::swap(sRects[idx].left, sRects[idx].top);
-			ofs = 1;
-			break;
-		}
-		float u1 = sRects[idx].left / (float)video.width;
-		float u2 = sRects[idx].right / (float)video.width;
-		float v1 = sRects[idx].top / (float)video.height;
-		float v2 = sRects[idx].bottom / (float)video.height;
-		float u[] = { u1,u2,u2,u1 };
-		float v[] = { v1,v1,v2,v2 };
-
-		glTexCoord2f(u[(ofs + 0) % 4], v[(ofs + 0) % 4]);
-		glVertex2i(dstRects[i].left, dstRects[i].top);
-
-		glTexCoord2f(u[(ofs + 1) % 4], v[(ofs + 1) % 4]);
-		glVertex2i(dstRects[i].right, dstRects[i].top);
-
-		glTexCoord2f(u[(ofs + 2) % 4], v[(ofs + 2) % 4]);
-		glVertex2i(dstRects[i].right, dstRects[i].bottom);
-
-		glTexCoord2f(u[(ofs + 3) % 4], v[(ofs + 3) % 4]);
-		glVertex2i(dstRects[i].left, dstRects[i].bottom);
-	}
-	glEnd();
-}
-static void OGL_DoDisplay()
-{
-	if(!gldisplay.begin()) return;
-
-	//the ds screen fills the texture entirely, so we dont have garbage at edge to worry about,
-	//but we need to make sure this is clamped for when filtering is selected
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-
-	if(GetStyle()&DWS_FILTER)
-	{
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-	}
-	else
-	{
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-	}
-
-	RECT rc;
-	HWND hwnd = MainWindow->getHWnd();
-	GetClientRect(hwnd,&rc);
-	int width = rc.right - rc.left;
-	int height = rc.bottom - rc.top;
 	
-	glViewport(0,0,width,height);
-	
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrtho(0.0f, (float)width, (float)height, 0.0f, -100.0f, 100.0f);
-
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-
-	//clear entire area, for cases where the screen is maximized
-	glClearColor(0,0,0,0);
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	// get dest and src rects
-	RECT dr[] = {MainScreenRect, SubScreenRect, GapRect};
-	for(int i=0;i<2;i++) //dont change gap rect, for some reason
+	if (maximized)
 	{
-		ScreenToClient(hwnd,(LPPOINT)&dr[i].left);
-		ScreenToClient(hwnd,(LPPOINT)&dr[i].right);
-	}
-	dr[2].bottom = height - dr[2].bottom;
-	dr[2].top = height - dr[2].top;
-
-	RECT srcRects [2];
-	const bool isMainGPUFirst = (GPU->GetDisplayInfo().engineID[NDSDisplayID_Main] == GPUEngineID_Main);
-
-	if(video.swap == 0)
-	{
-		srcRects[0] = MainScreenSrcRect;
-		srcRects[1] = SubScreenSrcRect;
-		if(osd) osd->swapScreens = false;
-	}
-	else if(video.swap == 1)
-	{
-		srcRects[0] = SubScreenSrcRect;
-		srcRects[1] = MainScreenSrcRect;
-		if(osd) osd->swapScreens = true;
-	}
-	else if(video.swap == 2)
-	{
-		srcRects[0] = (!isMainGPUFirst) ? SubScreenSrcRect : MainScreenSrcRect;
-		srcRects[1] = (!isMainGPUFirst) ? MainScreenSrcRect : SubScreenSrcRect;
-		if(osd) osd->swapScreens = !isMainGPUFirst;
-	}
-	else if(video.swap == 3)
-	{
-		srcRects[0] = (!isMainGPUFirst) ? MainScreenSrcRect : SubScreenSrcRect;
-		srcRects[1] = (!isMainGPUFirst) ? SubScreenSrcRect : MainScreenSrcRect;
-		if(osd) osd->swapScreens = isMainGPUFirst;
-	}
-
-	//printf("%d,%d %dx%d  -- %d,%d %dx%d\n",
-	//	srcRects[0].left,srcRects[0].top, srcRects[0].right-srcRects[0].left, srcRects[0].bottom-srcRects[0].top,
-	//	srcRects[1].left,srcRects[1].top, srcRects[1].right-srcRects[1].left, srcRects[1].bottom-srcRects[1].top
-	//	);
-
-	glEnable(GL_TEXTURE_2D);
-	// draw DS display
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, video.width, video.height, 0, GL_BGRA, GL_UNSIGNED_BYTE, video.finalBuffer());
-	OGL_DrawTexture(srcRects, dr);
-
-	// draw HUD
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glEnable(GL_BLEND);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GPU_FRAMEBUFFER_NATIVE_WIDTH, GPU_FRAMEBUFFER_NATIVE_HEIGHT * 2, 0, GL_BGRA, GL_UNSIGNED_BYTE, aggDraw.hud->buf().buf());
-	OGL_DrawTexture(srcRects, dr);
-	glDisable(GL_BLEND);
-
-	gldisplay.showPage();
-
-	gldisplay.end();
-}
-
-//the directdraw final presentation portion of display, including rotating
-static void DD_DoDisplay()
-{
-	if (!ddraw.lock()) return;
-	char* buffer = (char*)ddraw.surfDescBack.lpSurface;
-
-	if(ddraw.surfDescBack.dwWidth != video.rotatedwidth() || ddraw.surfDescBack.dwHeight != video.rotatedheight())
-	{
-		ddraw.createBackSurface(video.rotatedwidth(),video.rotatedheight());
-	}
-
-	switch (ddraw.surfDescBack.ddpfPixelFormat.dwRGBBitCount)
-	{
-	case 32:
-		doRotate<u32>(ddraw.surfDescBack.lpSurface);
-		break;
-	case 24:
-		doRotate<pix24>(ddraw.surfDescBack.lpSurface);
-		break;
-	case 16:
-		if (ddraw.surfDescBack.ddpfPixelFormat.dwGBitMask != 0x3E0)
-			doRotate<pix16>(ddraw.surfDescBack.lpSurface);
+		if (style & DWS_FULLSCREEN)
+			ShowFullScreen(hwnd);
 		else
-			doRotate<pix15>(ddraw.surfDescBack.lpSurface);
-		break;
-	case 0:
-		break;
-	default:
-		INFO("Unsupported color depth: %i bpp\n", ddraw.surfDescBack.ddpfPixelFormat.dwRGBBitCount);
-		//emu_halt();
-		break;
-	}
-	if (!ddraw.unlock()) return;
-
-	RECT* dstRects [2] = {&MainScreenRect, &SubScreenRect};
-	RECT* srcRects [2];
-	const bool isMainGPUFirst = (GPU->GetDisplayInfo().engineID[NDSDisplayID_Main] == GPUEngineID_Main);
-
-	if(video.swap == 0)
-	{
-		srcRects[0] = &MainScreenSrcRect;
-		srcRects[1] = &SubScreenSrcRect;
-		if(osd) osd->swapScreens = false;
-	}
-	else if(video.swap == 1)
-	{
-		srcRects[0] = &SubScreenSrcRect;
-		srcRects[1] = &MainScreenSrcRect;
-		if(osd) osd->swapScreens = true;
-	}
-	else if(video.swap == 2)
-	{
-		srcRects[0] = (!isMainGPUFirst) ? &SubScreenSrcRect : &MainScreenSrcRect;
-		srcRects[1] = (!isMainGPUFirst) ? &MainScreenSrcRect : &SubScreenSrcRect;
-		if(osd) osd->swapScreens = !isMainGPUFirst;
-	}
-	else if(video.swap == 3)
-	{
-		srcRects[0] = (!isMainGPUFirst) ? &MainScreenSrcRect : &SubScreenSrcRect;
-		srcRects[1] = (!isMainGPUFirst) ? &SubScreenSrcRect : &MainScreenSrcRect;
-		if(osd) osd->swapScreens = isMainGPUFirst;
-	}
-
-	//this code fills in all the undrawn areas
-	//it is probably a waste of time to keep black-filling all this, but we need to do it to be safe.
-	{
-		RECT wr;
-		GetWindowRect(MainWindow->getHWnd(),&wr);
-		RECT r;
-		GetNdsScreenRect(&r);
-		int left = r.left;
-		int top = r.top;
-		int right = r.right;
-		int bottom = r.bottom;
-		//printf("%d %d %d %d / %d %d %d %d\n",fullScreen.left,fullScreen.top,fullScreen.right,fullScreen.bottom,left,top,right,bottom);
-		//printf("%d %d %d %d / %d %d %d %d\n",MainScreenRect.left,MainScreenRect.top,MainScreenRect.right,MainScreenRect.bottom,SubScreenRect.left,SubScreenRect.top,SubScreenRect.right,SubScreenRect.bottom);
-		if(ddraw.OK())
-		{
-			DD_FillRect(ddraw.surface.primary,0,0,left,top,RGB(255,0,0)); //topleft
-			DD_FillRect(ddraw.surface.primary,left,0,right,top,RGB(128,0,0)); //topcenter
-			DD_FillRect(ddraw.surface.primary,right,0,wr.right,top,RGB(0,255,0)); //topright
-			DD_FillRect(ddraw.surface.primary,0,top,left,bottom,RGB(0,128,0));  //left
-			DD_FillRect(ddraw.surface.primary,right,top,wr.right,bottom,RGB(0,0,255)); //right
-			DD_FillRect(ddraw.surface.primary,0,bottom,left,wr.bottom,RGB(0,0,128)); //bottomleft
-			DD_FillRect(ddraw.surface.primary,left,bottom,right,wr.bottom,RGB(255,0,255)); //bottomcenter
-			DD_FillRect(ddraw.surface.primary,right,bottom,wr.right,wr.bottom,RGB(0,255,255)); //bottomright
-			if (video.layout == 1)
-			{
-				DD_FillRect(ddraw.surface.primary, SubScreenRect.left, wr.top, wr.right, SubScreenRect.top, RGB(0, 128, 128)); //Top gap left when centering the resized screen
-				DD_FillRect(ddraw.surface.primary, SubScreenRect.left, SubScreenRect.bottom, wr.right, wr.bottom, RGB(128, 128, 128)); //Bottom gap left when centering the resized screen
-			}
-		}
-	}
-
-	for(int i = 0; i < 2; i++)
-	{
-		if(i && video.layout == 2)
-			break;
-
-		if (!ddraw.blt(dstRects[i], srcRects[i])) return;
-	}
-
-	if (video.layout == 1) return;
-	if (video.layout == 2) return;
-
-	// Gap
-	if(video.screengap > 0)
-	{
-		//u32 color = gapColors[win_fw_config.fav_colour];
-		//u32 color_rev = (((color & 0xFF) << 16) | (color & 0xFF00) | ((color & 0xFF0000) >> 16));
-		u32 color_rev = (u32)ScreenGapColor;
-
-		HDC dc;
-		HBRUSH brush;
-
-		dc = GetDC(MainWindow->getHWnd());
-		brush = CreateSolidBrush(color_rev);
-
-		FillRect(dc, &GapRect, brush);
-
-		DeleteObject((HGDIOBJ)brush);
-		ReleaseDC(MainWindow->getHWnd(), dc);
+			ShowWindow(hwnd, SW_MAXIMIZE);
 	}
 }
-
-//triple buffering logic
-struct DisplayBuffer
-{
-	DisplayBuffer() 
-		: buffer(NULL)
-		, size(0)
-	{
-	}
-	u32* buffer;
-	size_t size; //[256*192*4];
-} displayBuffers[3];
-
-volatile int currDisplayBuffer=-1;
-volatile int newestDisplayBuffer=-2;
-slock_t *display_mutex = NULL;
-sthread_t *display_thread = NULL;
-volatile bool display_die = false;
-HANDLE display_wakeup_event = INVALID_HANDLE_VALUE;
-HANDLE display_done_event = INVALID_HANDLE_VALUE;
-DWORD display_done_timeout = 500;
-
-int displayPostponeType = 0;
-DWORD displayPostponeUntil = ~0;
-bool displayNoPostponeNext = false;
-
-DWORD display_invoke_argument = 0;
-void (*display_invoke_function)(DWORD) = NULL;
-HANDLE display_invoke_ready_event = INVALID_HANDLE_VALUE;
-HANDLE display_invoke_done_event = INVALID_HANDLE_VALUE;
-DWORD display_invoke_timeout = 500;
-CRITICAL_SECTION display_invoke_handler_cs;
-
-static void InvokeOnMainThread(void (*function)(DWORD), DWORD argument);
-
-static void DoDisplay_DrawHud()
-{
-	osd->update();
-	DrawHUD();
-	osd->clear();
-}
-
-//does a single display work unit. only to be used from the display thread
-static void DoDisplay()
-{
-	Lock lock (win_backbuffer_sync);
-
-	bool ddhw = (GetStyle()&DWS_DDRAW_HW)!=0;
-	bool ddsw = (GetStyle()&DWS_DDRAW_SW)!=0;
-
-	if(displayPostponeType && !displayNoPostponeNext && (displayPostponeType < 0 || timeGetTime() < displayPostponeUntil))
-		return;
-	displayNoPostponeNext = false;
-
-	//we have to do a copy here because we're about to draw the OSD onto it. bummer.
-	if(gpu_bpp == 15)
-		ColorspaceConvertBuffer555To8888Opaque<true, false>((u16 *)video.srcBuffer, video.buffer, video.srcBufferSize / 2);
-	else
-		ColorspaceConvertBuffer888XTo8888Opaque<true, false>((u32*)video.srcBuffer, video.buffer, video.srcBufferSize / 4);
-
-	//some games use the backlight for fading effects
-	const size_t pixCount = video.prefilterWidth * video.prefilterHeight / 2;
-	const NDSDisplayInfo &displayInfo = GPU->GetDisplayInfo();
-	ColorspaceApplyIntensityToBuffer32<false, false>(video.buffer, pixCount, displayInfo.backlightIntensity[NDSDisplayID_Main]);
-	ColorspaceApplyIntensityToBuffer32<false, false>(video.buffer + pixCount, pixCount, displayInfo.backlightIntensity[NDSDisplayID_Touch]);
-
-	if(AnyLuaActive())
-	{
-		if(sthread_isself(display_thread))
-		{
-			InvokeOnMainThread((void(*)(DWORD))
-				CallRegisteredLuaFunctions, LUACALL_AFTEREMULATIONGUI);
-		}
-		else
-		{
-			CallRegisteredLuaFunctions(LUACALL_AFTEREMULATIONGUI);
-		}
-	}
-
-	// draw hud
-	aggDraw.hud->clear();
-	DoDisplay_DrawHud();
-	if (ddhw || ddsw)
-	{
-		// DirectDraw doesn't support alpha blending, so we must scale and overlay the HUD ourselves.
-		T_AGG_RGBA target((u8*)video.buffer, video.prefilterWidth, video.prefilterHeight, video.prefilterWidth * 4);
-		target.transformImage(aggDraw.hud->image<T_AGG_PF_RGBA>(), 0, 0, video.prefilterWidth, video.prefilterHeight);
-	}
-
-	//apply user's filter
-	video.filter();
-
-	if(ddhw || ddsw)
-	{
-		gldisplay.kill();
-		DD_DoDisplay();
-	}
-	else
-	{
-		OGL_DoDisplay();
-	}
-}
-
-void displayProc()
-{
-	slock_lock(display_mutex);
-
-	//find a buffer to display
-	int todo = newestDisplayBuffer;
-	bool alreadyDisplayed = (todo == currDisplayBuffer);
-
-	slock_unlock(display_mutex);
-	
-	//something new to display:
-	if(!alreadyDisplayed) {
-		//start displaying a new buffer
-		currDisplayBuffer = todo;
-		video.srcBuffer = (u8*)displayBuffers[currDisplayBuffer].buffer;
-		video.srcBufferSize = displayBuffers[currDisplayBuffer].size;
-	}
-	DoDisplay();
-}
-
-
-void displayThread(void *arg)
-{
-	do
-	{
-		if ( (MainWindow == NULL) || IsMinimized(MainWindow->getHWnd()) )
-		{
-			WaitForSingleObject(display_wakeup_event, INFINITE);
-		}
-		else if ( (emu_paused || !execute || !romloaded) && (!HudEditorMode && !CommonSettings.hud.ShowInputDisplay && !CommonSettings.hud.ShowGraphicalInputDisplay) )
-		{
-			WaitForSingleObject(display_wakeup_event, 250);
-		}
-		else
-		{
-			WaitForSingleObject(display_wakeup_event, 10);
-		}
-		
-		if (display_die)
-		{
-			break;
-		}
-		
-		displayProc();
-		SetEvent(display_done_event);
-	} while (!display_die);
-}
-
-void KillDisplay()
-{
-	display_die = true;
-	SetEvent(display_wakeup_event);
-	if(display_thread)
-		sthread_join(display_thread);
-}
-
-void Display()
-{
-	const NDSDisplayInfo &dispInfo = GPU->GetDisplayInfo();
-
-	if(CommonSettings.single_core())
-	{
-		video.srcBuffer = (u8*)dispInfo.masterCustomBuffer;
-		video.srcBufferSize = dispInfo.customWidth * dispInfo.customHeight * dispInfo.pixelBytes * 2;
-		DoDisplay();
-	}
-	else
-	{
-		if(display_thread == NULL)
-		{
-			display_mutex = slock_new();
-			display_thread = sthread_create(&displayThread, nullptr);
-		}
-
-		slock_lock(display_mutex);
-
-		if(int diff = (currDisplayBuffer+1)%3 - newestDisplayBuffer)
-			newestDisplayBuffer += diff;
-		else newestDisplayBuffer = (currDisplayBuffer+2)%3;
-
-		DisplayBuffer& db = displayBuffers[newestDisplayBuffer];
-		size_t targetSize = dispInfo.customWidth * dispInfo.customHeight * dispInfo.pixelBytes * 2;
-		if(db.size != targetSize)
-		{
-			free_aligned(db.buffer);
-			db.buffer = (u32*)malloc_alignedPage(targetSize);
-			db.size = targetSize;
-		}
-		memcpy(db.buffer,dispInfo.masterCustomBuffer,targetSize);
-
-		slock_unlock(display_mutex);
-
-		SetEvent(display_wakeup_event);
-	}
-}
-
-
 
 void CheckMessages()
 {
@@ -2210,31 +1236,6 @@ void CheckMessages()
 		readConsole();
 }
 
-static void InvokeOnMainThread(void (*function)(DWORD), DWORD argument)
-{
-	ResetEvent(display_invoke_ready_event);
-	display_invoke_argument = argument;
-	display_invoke_function = function;
-	PostMessage(MainWindow->getHWnd(), WM_CUSTINVOKE, 0, 0); // in case a modal dialog or menu is open
-	SignalObjectAndWait(display_invoke_ready_event, display_invoke_done_event, display_invoke_timeout, FALSE);
-	display_invoke_function = NULL;
-}
-static void _ServiceDisplayThreadInvocation()
-{
-	Lock lock (display_invoke_handler_cs);
-	DWORD res = WaitForSingleObject(display_invoke_ready_event, display_invoke_timeout);
-	if(res != WAIT_ABANDONED && display_invoke_function)
-		display_invoke_function(display_invoke_argument);
-	display_invoke_function = NULL;
-	SetEvent(display_invoke_done_event);
-}
-static FORCEINLINE void ServiceDisplayThreadInvocations()
-{
-	if(display_invoke_function)
-		_ServiceDisplayThreadInvocation();
-}
-
-
 static struct MainLoopData
 {
 	u64 freq;
@@ -2251,7 +1252,6 @@ static struct MainLoopData
 	int fpsframecount;
 	int toolframecount;
 } mainLoopData = {0};
-
 
 static void StepRunLoop_Core()
 {
@@ -2304,9 +1304,12 @@ static void StepRunLoop_User()
 	Hud.fps = mainLoopData.fps;
 	Hud.fps3d = GPU->GetFPSRender3D();
 
-	// wait for the HUD to update from last frame
-	if(frameskiprate==0) WaitForSingleObject(display_done_event, display_done_timeout);
-	Display();
+	if (mainLoopData.framesskipped == 0)
+	{
+		WaitForSingleObject(display_done_event, display_done_timeout);
+		Display();
+	}
+	ResetEvent(display_done_event);
 
 	mainLoopData.fps3d = Hud.fps3d;
 
@@ -2687,9 +1690,6 @@ int MenuInit()
 //	DeleteMenu(configMenu,GetSubMenuIndexByHMENU(configMenu,advancedMenu),MF_BYPOSITION);
 //#endif
 
-	if (!gShowConsole)
-		DeleteMenu(toolsMenu, IDM_CONSOLE_ALWAYS_ON_TOP, MF_BYCOMMAND);
-
 	return 1;
 }
 
@@ -2712,97 +1712,6 @@ static void ExitRunLoop()
 
 class WinDriver : public BaseDriver
 {
-#ifdef EXPERIMENTAL_WIFI_COMM
-	virtual bool WIFI_SocketsAvailable() { return bSocketsAvailable; }
-	virtual bool WIFI_PCapAvailable() { return bWinPCapAvailable; }
-
-	virtual void WIFI_GetUniqueMAC(u8* mac)
-	{
-		if (mac == NULL) return;
-
-		char hostname[256];
-		if (gethostname(hostname, 256) != 0)
-			strncpy(hostname, "127.0.0.1", 256);
-
-		hostent* he = gethostbyname(hostname);
-		unsigned long ipaddr;
-		if (he == NULL || he->h_addr_list[0] == NULL)
-			ipaddr = 0x0100007F; // 127.0.0.1
-		else
-			ipaddr = *(unsigned long*)he->h_addr_list[0];
-
-		unsigned long pid = GetCurrentProcessId();
-
-		unsigned long hash = pid;
-		while ((hash & 0xFF000000) == 0)
-			hash <<= 1;
-		hash >>= 1;
-		hash += ipaddr >> 8;
-		hash &= 0x00FFFFFF;
-
-		mac[3] = hash >> 16;
-		mac[4] = (hash >> 8) & 0xFF;
-		mac[5] = hash & 0xFF;
-	}
-
-	virtual bool WIFI_WFCWarning()
-	{
-		return MessageBox(NULL, "You are trying to connect to the Nintendo WFC servers.\n"
-			"\n"
-			"Please don't do this."
-			"\n"
-			"DeSmuME is not perfect yet, and connecting to WFC will cause unexpected problems\n"
-			"for Nintendo, and for DeSmuME, which neither of us want.\n"
-			"\n"
-			"And you don't want that either, right?\n"
-			"\n"
-			"You may get your IP blocked and then you won't even be able to use your real DS.\n"
-			"You may cause DeSmuME to get blocked, which would be a shame since we wouldn't even\n"
-			"be able to work on it any more.\n"
-			"\n"
-			"By the time you read this, it may have already happened due to irresponsible individuals\n"
-			"ignoring this message.\n"
-			"\n"
-			"So please don't do it.\n"
-			"\n"
-			"We aren't going to try to stop you, since someone will just make a hacked build and you\n"
-			"won't get a chance to read this. So please, stop yourself.\n"
-			"\n"
-			"Do you still want to connect?",
-			"DeSmuME - WFC warning",
-			MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING
-		) == IDYES;
-	}
-
-	virtual int PCAP_findalldevs(pcap_if_t** alldevs, char* errbuf) {
-		return _pcap_findalldevs(alldevs, errbuf);
-	}
-
-	virtual void PCAP_freealldevs(pcap_if_t* alldevs) {
-		_pcap_freealldevs(alldevs);
-	}
-
-	virtual pcap_t* PCAP_open(const char* source, int snaplen, int flags, int readtimeout, char* errbuf) {
-		return _pcap_open_live(source, snaplen, flags, readtimeout, errbuf);
-	}
-
-	virtual void PCAP_close(pcap_t* dev) {
-		_pcap_close(dev);
-	}
-
-	virtual int PCAP_setnonblock(pcap_t* dev, int nonblock, char* errbuf) {
-		return _pcap_setnonblock(dev, nonblock, errbuf);
-	}
-
-	virtual int PCAP_sendpacket(pcap_t* dev, const u_char* data, int len) {
-		return _pcap_sendpacket(dev, data, len);
-	}
-
-	virtual int PCAP_dispatch(pcap_t* dev, int num, pcap_handler callback, u_char* userdata) {
-		return _pcap_dispatch(dev, num, callback, userdata);
-	}
-#endif
-
 	virtual bool AVI_IsRecording()
 	{
 		return ::AVI_IsRecording();
@@ -2900,6 +1809,8 @@ class WinDriver : public BaseDriver
 
 		CheckMessages();
 
+		if(finished) ExitProcess(0); //I guess.... fixes hangs when exiting while a lua script is running
+
 		if(!romloaded)
 			return ESTEP_DONE;
 
@@ -2984,16 +1895,27 @@ int _main()
 	OGLLoadEntryPoints_3_2_Func = OGLLoadEntryPoints_3_2;
 	OGLCreateRenderer_3_2_Func = OGLCreateRenderer_3_2;
 
+	bool isSocketsSupported = false;
+	bool isPCapSupported = false;
 
-#ifdef EXPERIMENTAL_WIFI_COMM
 	WSADATA wsaData; 	 
-	WORD version = MAKEWORD(1,1); 
+	WORD version = MAKEWORD(2,2); 
 
-	if (WSAStartup(version, &wsaData) == 0) 	  	 
-		bSocketsAvailable = true;
+	// Start up Windows Sockets.
+	if (WSAStartup(version, &wsaData) == 0)
+	{
+		// Check for a matching DLL version. If the version doesn't match, then bail.
+		if ( (LOBYTE(wsaData.wVersion) == 2) && (HIBYTE(wsaData.wVersion) == 2) )
+		{
+			isSocketsSupported = true;
+		}
+		else
+		{
+			WSACleanup();
+		}
+	}
 
-	LoadWinPCap();
-#endif
+	LoadWinPCap(isPCapSupported);
 
 	driver = new WinDriver();
 	WinGPUEvent = new GPUEventHandlerWindows;
@@ -3040,18 +1962,13 @@ int _main()
 	u32 style = DWS_NORMAL;
 	if(GetPrivateProfileBool("Video","Window Always On Top", false, IniName)) style |= DWS_ALWAYSONTOP;
 	if(GetPrivateProfileBool("Video","Window Lockdown", false, IniName)) style |= DWS_LOCKDOWN;
+	if(GetPrivateProfileBool("Display", "Show Menu In Fullscreen Mode", false, IniName)) style |= DWS_FS_MENU;
+	if (GetPrivateProfileBool("Display", "Non-exclusive Fullscreen Mode", false, IniName)) style |= DWS_FS_WINDOW;
 	
-	if(GetPrivateProfileBool("Video","Display Method Filter", false, IniName))
-		style |= DWS_FILTER;
+	gldisplay.filter = GetPrivateProfileBool("Video","Display Method Filter", false, IniName);
 	if(GetPrivateProfileBool("Video","VSync", false, IniName))
 		style |= DWS_VSYNC;
-	int dispMethod = GetPrivateProfileInt("Video","Display Method", DISPMETHOD_DDRAW_HW, IniName);
-	if(dispMethod == DISPMETHOD_DDRAW_SW)
-		style |= DWS_DDRAW_SW;
-	if(dispMethod == DISPMETHOD_DDRAW_HW)
-		style |= DWS_DDRAW_HW;
-	if(dispMethod == DISPMETHOD_OPENGL)
-		style |= DWS_OPENGL;
+	displayMethod = GetPrivateProfileInt("Video","Display Method", DISPMETHOD_DDRAW_HW, IniName);
 
 	windowSize = GetPrivateProfileInt("Video","Window Size", 0, IniName);
 	video.rotation =  GetPrivateProfileInt("Video","Window Rotate", 0, IniName);
@@ -3085,6 +2002,7 @@ int _main()
 	GetPrivateProfileString("MicSettings", "MicSampleFile", "micsample.raw", MicSampleName, MAX_PATH, IniName);
 	RefreshMicSettings();
 	
+	autoHideCursor = GetPrivateProfileBool("Display", "Auto-Hide Cursor", false, IniName);
 	GetPrivateProfileString("Display", "Screen Size Ratio", "1.0", scrRatStr, 4, IniName);
 	screenSizeRatio = atof(scrRatStr);
 	vCenterResizedScr = GetPrivateProfileBool("Display", "Vertically Center Resized Screen", 1, IniName);
@@ -3096,11 +2014,9 @@ int _main()
 	CommonSettings.spu_advanced = GetPrivateProfileBool("Sound", "SpuAdvanced", true, IniName);
 	CommonSettings.advanced_timing = GetPrivateProfileBool("Emulation", "AdvancedTiming", true, IniName);
 	CommonSettings.gamehacks.en = GetPrivateProfileBool("Emulation", "GameHacks", true, IniName);
-
-	CommonSettings.GFX3D_Renderer_TextureDeposterize =  GetPrivateProfileBool("3D", "TextureDeposterize ", 0, IniName);
-	CommonSettings.GFX3D_Renderer_TextureSmoothing =  GetPrivateProfileBool("3D", "TextureSmooth ", 0, IniName);
-	gpu_bpp = GetPrivateProfileInt("3D", "GpuBpp ", 18, IniName);
-		
+	CommonSettings.GFX3D_Renderer_TextureDeposterize =  GetPrivateProfileBool("3D", "TextureDeposterize", 0, IniName);
+	CommonSettings.GFX3D_Renderer_TextureSmoothing =  GetPrivateProfileBool("3D", "TextureSmooth", 0, IniName);
+	gpu_bpp = GetValid3DIntSetting("GpuBpp", 18, possibleBPP, 3);
 	lostFocusPause = GetPrivateProfileBool("Focus", "BackgroundPause", false, IniName);
 
 	//Get Ram-Watch values
@@ -3198,9 +2114,6 @@ int _main()
 			TABLET_DISABLE_FLICKFALLBACKKEYS
 			));
 
-	InitCustomKeys(&CustomKeys);
-	LoadHotkeyConfig();
-
 	if(MenuInit() == 0)
 	{
 		MessageBox(NULL, "Error creating main menu", "DeSmuME", MB_OK);
@@ -3211,11 +2124,7 @@ int _main()
 	SetStyle(style);
 
 	DragAcceptFiles(MainWindow->getHWnd(), TRUE);
-
-#ifdef EXPERIMENTAL_WIFI_COMM
 	EnableMenuItem(mainMenu, IDM_WIFISETTINGS, MF_ENABLED);
-#endif
-
 
 	InitCustomKeys(&CustomKeys);
 	Hud.reset();
@@ -3328,18 +2237,7 @@ int _main()
 	Piano.Enabled	= (slot2_device_type == NDS_SLOT2_EASYPIANO)?true:false;
 	Paddle.Enabled	= (slot2_device_type == NDS_SLOT2_PADDLE)?true:false;
 
-	if (GetPrivateProfileBool("Wifi", "Enabled", false, IniName))
-	{
-		if (GetPrivateProfileBool("Wifi", "Compatibility Mode", false, IniName))
-			wifiEmulationLevel = WifiEmulationLevel_Compatibility;
-		else
-			wifiEmulationLevel = WifiEmulationLevel_Normal;
-	}
-	else
-		wifiEmulationLevel = WifiEmulationLevel_Off;
-
-	CommonSettings.wifi.mode = GetPrivateProfileInt("Wifi", "Mode", 0, IniName);
-	CommonSettings.wifi.infraBridgeAdapter = GetPrivateProfileInt("Wifi", "BridgeAdapter", 0, IniName);
+	CommonSettings.WifiBridgeDeviceID = GetPrivateProfileInt("Wifi", "BridgeAdapter", 0, IniName);
 
 	osd = new OSDCLASS(-1);
 
@@ -3347,9 +2245,23 @@ int _main()
 
 	GPU->SetEventHandler(WinGPUEvent);
 
-	CommonSettings.GFX3D_Renderer_TextureScalingFactor = (cmdline.texture_upscale != -1) ? cmdline.texture_upscale : GetPrivateProfileInt("3D", "TextureScalingFactor ", 1, IniName);
-	int newPrescaleHD = (cmdline.gpu_resolution_multiplier != -1) ? cmdline.gpu_resolution_multiplier : GetPrivateProfileInt("3D", "PrescaleHD", 1, IniName);
+	WinPCapInterface *winpcapInterface = (isPCapSupported) ? new WinPCapInterface : NULL;
+	wifiHandler->SetPCapInterface(winpcapInterface);
+	wifiHandler->SetSocketsSupported(isSocketsSupported);
+	wifiHandler->SetBridgeDeviceIndex(CommonSettings.WifiBridgeDeviceID);
 
+	if (GetPrivateProfileBool("Wifi", "Enabled", false, IniName))
+	{
+		if (GetPrivateProfileBool("Wifi", "Compatibility Mode", false, IniName))
+			wifiHandler->SetEmulationLevel(WifiEmulationLevel_Compatibility);
+		else
+			wifiHandler->SetEmulationLevel(WifiEmulationLevel_Normal);
+	}
+	else
+		wifiHandler->SetEmulationLevel(WifiEmulationLevel_Off);
+	
+	CommonSettings.GFX3D_Renderer_TextureScalingFactor = (cmdline.texture_upscale != -1) ? cmdline.texture_upscale : GetValid3DIntSetting("TextureScalingFactor", 1, possibleTexScale, 3);
+	int newPrescaleHD = (cmdline.gpu_resolution_multiplier != -1) ? cmdline.gpu_resolution_multiplier : GetPrivateProfileInt("3D", "PrescaleHD", 1, IniName);
 	video.SetPrescale(newPrescaleHD, 1);
 	GPU->SetCustomFramebufferSize(GPU_FRAMEBUFFER_NATIVE_WIDTH*video.prescaleHD, GPU_FRAMEBUFFER_NATIVE_HEIGHT*video.prescaleHD);
 	SyncGpuBpp();
@@ -3450,8 +2362,12 @@ int _main()
 	CommonSettings.GFX3D_Fog = GetPrivateProfileBool("3D", "EnableFog", 1, IniName);
 	CommonSettings.GFX3D_Texture = GetPrivateProfileBool("3D", "EnableTexture", 1, IniName);
 	CommonSettings.GFX3D_LineHack = GetPrivateProfileBool("3D", "EnableLineHack", 1, IniName);
-	CommonSettings.GFX3D_Renderer_Multisample = GetPrivateProfileBool("3D", "EnableAntiAliasing", 0, IniName);
-	CommonSettings.GFX3D_TXTHack = GetPrivateProfileBool("3D", "EnableTXTHack", 0, IniName); //default is off.
+	CommonSettings.GFX3D_TXTHack = GetPrivateProfileBool("3D", "EnableTXTHack", 0, IniName); // Default is off.
+	CommonSettings.OpenGL_Emulation_ShadowPolygon = GetPrivateProfileBool("3D", "EnableShadowPolygon", 1, IniName);
+	CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending = GetPrivateProfileBool("3D", "EnableSpecialZeroAlphaBlending", 1, IniName);
+	CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance = GetPrivateProfileBool("3D", "EnableDepthEqualsTestTolerance", 1, IniName);
+	CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing = GetPrivateProfileBool("3D", "EnableDepthLEqualPolygonFacing", 0, IniName); // Default is off.
+	CommonSettings.GFX3D_Renderer_MultisampleSize = GetValid3DIntSetting("MultisampleSize", 0, possibleMSAA, 6);
 	Change3DCoreWithFallbackAndSave(cur3DCore);
 
 
@@ -3490,19 +2406,53 @@ int _main()
 
 	CommonSettings.UseExtFirmware = GetPrivateProfileBool("Firmware", "UseExtFirmware", false, IniName);
 	CommonSettings.UseExtFirmwareSettings = GetPrivateProfileBool("Firmware", "UseExtFirmwareSettings", false, IniName);
-	GetPrivateProfileString("Firmware", "FirmwareFile", "firmware.bin", CommonSettings.Firmware, 256, IniName);
+	GetPrivateProfileString("Firmware", "FirmwareFile", "firmware.bin", CommonSettings.ExtFirmwarePath, 256, IniName);
 	CommonSettings.BootFromFirmware = GetPrivateProfileBool("Firmware", "BootFromFirmware", false, IniName);
 
 	video.setfilter(GetPrivateProfileInt("Video", "Filter", video.NONE, IniName));
 	FilterUpdate(MainWindow->getHWnd(),false);
 
 	//default the firmware settings, they may get changed later
-	NDS_FillDefaultFirmwareConfigData(&CommonSettings.fw_config);
+	NDS_GetDefaultFirmwareConfig(CommonSettings.fwConfig);
+	
+	// Generate the unique MAC address.
+	{
+		// Get the host's IP4 address.
+		char hostname[256];
+		if (gethostname(hostname, 256) != 0)
+			strncpy(hostname, "127.0.0.1", 256);
+		
+		hostent *he = gethostbyname(hostname);
+		u32 ipaddr;
+		if (he == NULL || he->h_addr_list[0] == NULL)
+			ipaddr = 0x0100007F; // 127.0.0.1
+		else
+			ipaddr = *(u32 *)he->h_addr_list[0];
+		
+		u32 hash = (u32)GetCurrentProcessId();
+		
+		while ((hash & 0xFF000000) == 0)
+		{
+			hash <<= 1;
+		}
+		
+		hash >>= 1;
+		hash += ipaddr >> 8;
+		hash &= 0x00FFFFFF;
+		
+		CommonSettings.fwConfig.MACAddress[0] = 0x00;
+		CommonSettings.fwConfig.MACAddress[1] = 0x09;
+		CommonSettings.fwConfig.MACAddress[2] = 0xBF;
+		CommonSettings.fwConfig.MACAddress[3] = hash >> 16;
+		CommonSettings.fwConfig.MACAddress[4] = (hash >> 8) & 0xFF;
+		CommonSettings.fwConfig.MACAddress[5] = hash & 0xFF;
+	}
+	
 	// Read the firmware settings from the init file
-	CommonSettings.fw_config.fav_colour = GetPrivateProfileInt("Firmware","favColor", 10, IniName);
-	CommonSettings.fw_config.birth_month = GetPrivateProfileInt("Firmware","bMonth", 7, IniName);
-	CommonSettings.fw_config.birth_day = GetPrivateProfileInt("Firmware","bDay", 15, IniName);
-	CommonSettings.fw_config.language = GetPrivateProfileInt("Firmware","Language", 1, IniName);
+	CommonSettings.fwConfig.favoriteColor = GetPrivateProfileInt("Firmware","favColor", 10, IniName);
+	CommonSettings.fwConfig.birthdayMonth = GetPrivateProfileInt("Firmware","bMonth", 7, IniName);
+	CommonSettings.fwConfig.birthdayDay = GetPrivateProfileInt("Firmware","bDay", 15, IniName);
+	CommonSettings.fwConfig.language = GetPrivateProfileInt("Firmware","Language", 1, IniName);
 
 	{
 		/*
@@ -3512,21 +2462,21 @@ int _main()
 		char temp_str[27];
 		int char_index;
 		GetPrivateProfileString("Firmware","nickName", "yopyop", temp_str, 11, IniName);
-		CommonSettings.fw_config.nickname_len = strlen( temp_str);
+		CommonSettings.fwConfig.nicknameLength = strlen( temp_str);
 
-		if (CommonSettings.fw_config.nickname_len == 0) {
+		if (CommonSettings.fwConfig.nicknameLength == 0) {
 			strcpy( temp_str, "yopyop");
-			CommonSettings.fw_config.nickname_len = strlen( temp_str);
+			CommonSettings.fwConfig.nicknameLength = strlen( temp_str);
 		}
 
-		for ( char_index = 0; char_index < CommonSettings.fw_config.nickname_len; char_index++) {
-			CommonSettings.fw_config.nickname[char_index] = temp_str[char_index];
+		for ( char_index = 0; char_index < CommonSettings.fwConfig.nicknameLength; char_index++) {
+			CommonSettings.fwConfig.nickname[char_index] = temp_str[char_index];
 		}
 
 		GetPrivateProfileString("Firmware","Message", "DeSmuME makes you happy!", temp_str, 27, IniName);
-		CommonSettings.fw_config.message_len = strlen( temp_str);
-		for ( char_index = 0; char_index < CommonSettings.fw_config.message_len; char_index++) {
-			CommonSettings.fw_config.message[char_index] = temp_str[char_index];
+		CommonSettings.fwConfig.messageLength = strlen( temp_str);
+		for ( char_index = 0; char_index < CommonSettings.fwConfig.messageLength; char_index++) {
+			CommonSettings.fwConfig.message[char_index] = temp_str[char_index];
 		}
 	}
 
@@ -3539,7 +2489,7 @@ int _main()
 	}
 
 	//not supported; use the GUI
-	//if(cmdline.language != -1) CommonSettings.fw_config.language = cmdline.language;
+	//if(cmdline.language != -1) CommonSettings.fwConfig.language = cmdline.language;
 
 	cmdline.process_movieCommands();
 	
@@ -3582,6 +2532,11 @@ int _main()
     gdbstub_mutex_destroy();
 #endif
 	
+	if (wifiHandler->IsSocketsSupported())
+	{
+		WSACleanup();
+	}
+
 	NDS_DeInit();
 
 #ifdef DEBUG
@@ -3615,10 +2570,6 @@ int _main()
 	ddraw.release();
 
 	UnregWndClass("DeSmuME");
-
-#ifdef EXPERIMENTAL_WIFI_COMM
-	WSACleanup();
-#endif
 
 	return 0;
 }
@@ -3689,6 +2640,22 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
 	return ret;
 }
 
+// Checks for incorrect values, updates ini and returns a valid value. Requires an array to check.
+int GetValid3DIntSetting(char *settingName, const int defVal, const int arrName[], const int arrSize)
+{
+	const int curVal = GetPrivateProfileInt("3D", settingName, defVal, IniName);
+
+	for (int i = 0; i <= arrSize; i++)
+	{
+		if (curVal == arrName[i])
+		{
+			return curVal;
+		}
+	}
+	// Sets to defaults if ini value is incorrect.
+	WritePrivateProfileInt("3D", settingName, defVal, IniName);
+	return defVal;
+}
 
 void UpdateScreenRects()
 {
@@ -3772,6 +2739,12 @@ void FixAspectRatio()
 
 void SetScreenGap(int gap)
 {
+	HWND hwnd = MainWindow->getHWnd();
+	u32 style = GetStyle();
+	bool maximized = IsZoomed(hwnd) || fsWindow;
+	if (maximized)
+		RestoreWindow(hwnd);
+	
 	RECT clientRect;
 	GetClientRect(MainWindow->getHWnd(), &clientRect);
 	RECT rc;
@@ -3786,15 +2759,28 @@ void SetScreenGap(int gap)
 	SetMinWindowSize();
 	FixAspectRatio();
 	UpdateWndRects(MainWindow->getHWnd());
+
+	if (maximized)
+	{
+		if (style & DWS_FULLSCREEN)
+			ShowFullScreen(hwnd);
+		else
+			ShowWindow(hwnd, SW_MAXIMIZE);
+	}
 }
 
 //========================================================================================
 void SetRotate(HWND hwnd, int rot, bool user)
 {
-	bool maximized = IsZoomed(hwnd)==TRUE;
+	if (video.layout != 0) return;
+
+	u32 style = GetStyle();
+	bool maximized = IsZoomed(hwnd) || fsWindow;
+
 	if(((rot == 90) || (rot == 270)) == ((video.rotation == 90) || (video.rotation == 270)))
 		maximized = false; // no need to toggle out to windowed if the dimensions aren't changing
-	if(maximized) ShowWindow(hwnd,SW_NORMAL);
+	if (maximized)
+		RestoreWindow(hwnd);
 	{
 	Lock lock (win_backbuffer_sync);
 
@@ -3864,7 +2850,13 @@ void SetRotate(HWND hwnd, int rot, bool user)
 	UpdateScreenRects();
 	UpdateWndRects(hwnd);
 	}
-	if(maximized) ShowWindow(hwnd,SW_MAXIMIZE);
+	if (maximized)
+	{
+		if (style & DWS_FULLSCREEN)
+			ShowFullScreen(hwnd);
+		else
+			ShowWindow(hwnd, SW_MAXIMIZE);
+	}
 }
 
 void AviEnd()
@@ -3907,6 +2899,7 @@ void AviRecordTo()
 	//}
 
 	// avi record file browser
+	char outFilename[MAX_PATH] = "";
 	memset(&ofn, 0, sizeof(ofn));
 	ofn.lStructSize = sizeof(ofn);
 	ofn.hwndOwner = MainWindow->getHWnd();
@@ -3914,22 +2907,15 @@ void AviRecordTo()
 	ofn.lpstrDefExt = "avi";
 	ofn.lpstrTitle = "Save AVI as";
 
-	char folder[MAX_PATH];
-	ZeroMemory(folder, sizeof(folder));
-	path.getpath(path.AVI_FILES, folder);
+	std::string dir = path.getpath(path.AVI_FILES);
+	ofn.lpstrInitialDir = dir.c_str();
+	path.formatname(outFilename);
+	ofn.lpstrFile = outFilename;
 
-	char file[MAX_PATH];
-	ZeroMemory(file, sizeof(file));
-	path.formatname(file);
-
-	strcat(folder, file);
-	int len = strlen(folder);
-	if(len > MAX_PATH - 4)
-		folder[MAX_PATH - 4] = '\0';
-	
-	strcat(folder, ".avi");
-	ofn.lpstrFile = folder;
-
+	int len = strlen(outFilename);
+	if(len + dir.length() > MAX_PATH - 4)
+		outFilename[MAX_PATH - dir.length() - 4] = '\0';
+	strcat(outFilename, ".avi");
 
 	ofn.nMaxFile = MAX_PATH;
 	ofn.Flags = OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT | OFN_NOREADONLYRETURN | OFN_PATHMUSTEXIST;
@@ -3943,12 +2929,16 @@ void AviRecordTo()
 			driver->AddLine("AVI recording ended.");
 		}
 
-		bool result = DRV_AviBegin(folder);
+		bool result = DRV_AviBegin(outFilename);
 		if (result)
 		{
 			LOG("AVI recording started.");
 			driver->AddLine("AVI recording started.");
 		}
+
+		dir = Path::GetFileDirectoryPath(outFilename);
+		path.setpath(path.AVI_FILES, dir);
+		WritePrivateProfileString(SECTION, AVIKEY, dir.c_str(), IniName);
 	}
 
 	NDS_UnPause();
@@ -3976,7 +2966,6 @@ void WavRecordTo(int wavmode)
 	NDS_Pause();
 
 	OPENFILENAME ofn;
-	char szChoice[MAX_PATH] = {0};
 
 	////if we are playing a movie, construct the filename from the current movie.
 	////else construct it from the filename.
@@ -4000,20 +2989,34 @@ void WavRecordTo(int wavmode)
 	//}
 
 	// wav record file browser
+	char outFilename[MAX_PATH] = "";
 	memset(&ofn, 0, sizeof(ofn));
 	ofn.lStructSize = sizeof(ofn);
 	ofn.hwndOwner = MainWindow->getHWnd();
 	ofn.lpstrFilter = "WAV Files (*.wav)\0*.wav\0\0";
-	ofn.lpstrFile = szChoice;
 	ofn.lpstrDefExt = "wav";
 	ofn.lpstrTitle = "Save WAV as";
+
+	std::string dir = path.getpath(path.AVI_FILES);
+	ofn.lpstrInitialDir = dir.c_str();
+	path.formatname(outFilename);
+	ofn.lpstrFile = outFilename;
+
+	int len = strlen(outFilename);
+	if (len + dir.length() > MAX_PATH - 4)
+		outFilename[MAX_PATH - dir.length() - 4] = '\0';
+	strcat(outFilename, ".wav");
 
 	ofn.nMaxFile = MAX_PATH;
 	ofn.Flags = OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT | OFN_NOREADONLYRETURN | OFN_PATHMUSTEXIST;
 
 	if(GetSaveFileName(&ofn))
 	{
-		WAV_Begin(szChoice, (WAVMode)wavmode);
+		WAV_Begin(outFilename, (WAVMode)wavmode);
+
+		dir = Path::GetFileDirectoryPath(outFilename);
+		path.setpath(path.AVI_FILES, dir);
+		WritePrivateProfileString(SECTION, AVIKEY, dir.c_str(), IniName);
 	}
 
 	NDS_UnPause();
@@ -4097,9 +3100,9 @@ LRESULT OpenFile()
 	HWND hwnd = MainWindow->getHWnd();
 
 	int filterSize = 0, i = 0;
-	OPENFILENAME ofn;
-	char filename[MAX_PATH] = "",
-		fileFilter[512]="";
+	OPENFILENAMEW ofn;
+	wchar_t filename[MAX_PATH] = L"",
+		fileFilter[512]=L"";
 	NDS_Pause(); //Stop emulation while opening new rom
 
 	ZeroMemory(&ofn, sizeof(ofn));
@@ -4107,7 +3110,7 @@ LRESULT OpenFile()
 	ofn.hwndOwner = hwnd;
 
 	ofn.lpstrFilter = 
-		"All Usable Files (*.nds, *.ds.gba, *.srl, *.zip, *.7z, *.rar, *.gz)\0*.nds;*.ds.gba;*.srl;*.zip;*.7z;*.rar;*.gz\0"
+		L"All Usable Files (*.nds, *.ds.gba, *.srl, *.zip, *.7z, *.rar, *.gz)\0*.nds;*.ds.gba;*.srl;*.zip;*.7z;*.rar;*.gz\0"
 		"NDS ROM file (*.nds,*.srl)\0*.nds;*.srl\0"
 		"NDS/GBA ROM File (*.ds.gba)\0*.ds.gba\0"
 		"Zipped NDS ROM file (*.zip)\0*.zip\0"
@@ -4121,15 +3124,12 @@ LRESULT OpenFile()
 	ofn.nFilterIndex = 1;
 	ofn.lpstrFile =  filename;
 	ofn.nMaxFile = MAX_PATH;
-	ofn.lpstrDefExt = "nds";
+	ofn.lpstrDefExt = L"nds";
 	ofn.Flags = OFN_NOCHANGEDIR | OFN_HIDEREADONLY | OFN_FILEMUSTEXIST;
+	std::wstring dir = mbstowcs(path.getpath(path.ROMS));
+	ofn.lpstrInitialDir = dir.c_str();
 
-	char buffer[MAX_PATH];
-	ZeroMemory(buffer, sizeof(buffer));
-	path.getpath(path.ROMS, buffer);
-	ofn.lpstrInitialDir = buffer;
-
-	if (GetOpenFileName(&ofn) == NULL)
+	if (GetOpenFileNameW(&ofn) == NULL)
 	{
 		NDS_UnPause();
 		return 0;
@@ -4138,18 +3138,13 @@ LRESULT OpenFile()
 	{
 		if(path.savelastromvisit)
 		{
-			char *lchr, buffer[MAX_PATH];
-			ZeroMemory(buffer, sizeof(buffer));
-
-			lchr = strrchr(filename, '\\');
-			strncpy(buffer, filename, strlen(filename) - strlen(lchr));
-			
-			path.setpath(path.ROMS, buffer);
-			WritePathSettings();
+			std::string dir = Path::GetFileDirectoryPath(wcstombs(filename));
+			path.setpath(path.ROMS, dir);
+			WritePrivateProfileString(SECTION, ROMKEY, dir.c_str(), IniName);
 		}
 	}
 
-	if(!OpenCore(filename))
+	if(!OpenCore(wcstombs((std::wstring)filename).c_str()))
 		return 0;
 
 //	if(!GetOpenFileName(&ofn))
@@ -4496,11 +3491,9 @@ void RunConfig(CONFIGSCREEN which)
 	case CONFIGSCREEN_PATHSETTINGS:
 		DialogBoxW(hAppInst, MAKEINTRESOURCEW(IDD_PATHSETTINGS), hwnd, (DLGPROC)PathSettingsDlgProc);
 		break;
-#ifdef EXPERIMENTAL_WIFI_COMM
 	case CONFIGSCREEN_WIFI:
 		DialogBoxW(hAppInst,MAKEINTRESOURCEW(IDD_WIFISETTINGS), hwnd, (DLGPROC) WifiSettingsDlgProc);
 		break;
-#endif
 	}
 
 	if (tpaused)
@@ -4509,6 +3502,11 @@ void RunConfig(CONFIGSCREEN which)
 
 void FilterUpdate(HWND hwnd, bool user)
 {
+	u32 style = GetStyle();
+	bool maximized = IsZoomed(hwnd) || fsWindow;
+	if (maximized)
+		RestoreWindow(hwnd);
+
 	UpdateScreenRects();
 	UpdateWndRects(hwnd);
 	SetScreenGap(video.screengap);
@@ -4521,12 +3519,20 @@ void FilterUpdate(HWND hwnd, bool user)
 	WritePrivateProfileInt("Video", "Filter", video.currentfilter, IniName);
 	WritePrivateProfileInt("Video", "Width", video.width, IniName);
 	WritePrivateProfileInt("Video", "Height", video.height, IniName);
+
+	if (maximized)
+	{
+		if (style & DWS_FULLSCREEN)
+			ShowFullScreen(hwnd);
+		else
+			ShowWindow(hwnd, SW_MAXIMIZE);
+	}
 }
 
 void SaveWindowSize(HWND hwnd)
 {
 	//dont save if window was maximized
-	if(IsZoomed(hwnd)) return;
+	if(IsZoomed(hwnd) || fsWindow) return;
 	RECT rc;
 	GetClientRect(hwnd, &rc);
 	rc.top += MainWindowToolbar->GetHeight();
@@ -4537,34 +3543,26 @@ void SaveWindowSize(HWND hwnd)
 void SaveWindowPos(HWND hwnd)
 {
 	//dont save if window was maximized
-	if(IsZoomed(hwnd)) return;
+	if(IsZoomed(hwnd) || fsWindow) return;
 	WritePrivateProfileInt("Video", "WindowPosX", WndX/*MainWindowRect.left*/, IniName);
 	WritePrivateProfileInt("Video", "WindowPosY", WndY/*MainWindowRect.top*/, IniName);
-}
-
-
-static void TwiddleLayer(UINT ctlid, int core, int layer)
-{
-	GPUEngineBase *gpu = ((GPUEngineID)core == GPUEngineID_Main) ? (GPUEngineBase *)GPU->GetEngineMain() : (GPUEngineBase *)GPU->GetEngineSub();
-
-	const bool newLayerState = !CommonSettings.dispLayers[core][layer];
-	gpu->SetLayerEnableState(layer, newLayerState);
-	MainWindow->checkMenu(ctlid, newLayerState);
 }
 
 //========================================================================================
 LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 { 
 	static int tmp_execute;
+	static UINT_PTR autoHideCursorTimer = 0;
+	static bool mouseLeftClientArea = true;
+
+	TRACKMOUSEEVENT tme;
+	tme.cbSize = sizeof(tme);
+	tme.dwFlags = TME_LEAVE;
+	tme.hwndTrack = hwnd;
+
 	switch (message)                  // handle the messages
 	{
 		case WM_INITMENU:
-			{
-#ifdef EXPERIMENTAL_WIFI_COMM
-				if (!(bSocketsAvailable || bWinPCapAvailable))
-#endif
-					DeleteMenu(GetMenu(hwnd), IDM_WIFISETTINGS, MF_BYCOMMAND);
-			}
 			return 0;
 
 		case WM_EXITMENULOOP:
@@ -4696,6 +3694,15 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			// Show toolbar
 			MainWindow->checkMenu(IDM_SHOWTOOLBAR, MainWindowToolbar->Visible());
 	
+			// Show Menu In Fullscreen Mode
+			MainWindow->checkMenu(IDM_FS_MENU, (GetStyle()&DWS_FS_MENU) != 0);
+
+			// Non-exclusive Fullscreen Mode
+			MainWindow->checkMenu(IDM_FS_WINDOW, (GetStyle()&DWS_FS_WINDOW) != 0);
+
+			// Auto-Hide Cursor In Fullscreen Mode
+			MainWindow->checkMenu(IDM_FS_HIDE_CURSOR, autoHideCursor);
+
 			//Counters / Etc.
 			MainWindow->checkMenu(ID_VIEW_FRAMECOUNTER,CommonSettings.hud.FrameCounterDisplay);
 			MainWindow->checkMenu(ID_VIEW_DISPLAYFPS,CommonSettings.hud.FpsDisplay);
@@ -4752,10 +3759,10 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			MainWindow->checkMenu(IDM_RENDER_5XBRZ, video.currentfilter == video._5XBRZ );
 
 			MainWindow->checkMenu(ID_DISPLAYMETHOD_VSYNC, (GetStyle()&DWS_VSYNC)!=0);
-			MainWindow->checkMenu(ID_DISPLAYMETHOD_DIRECTDRAWHW, (GetStyle()&DWS_DDRAW_HW)!=0);
-			MainWindow->checkMenu(ID_DISPLAYMETHOD_DIRECTDRAWSW, (GetStyle()&DWS_DDRAW_SW)!=0);
-			MainWindow->checkMenu(ID_DISPLAYMETHOD_OPENGL, (GetStyle()&DWS_OPENGL)!=0);
-			MainWindow->checkMenu(ID_DISPLAYMETHOD_FILTER, (GetStyle()&DWS_FILTER)!=0);
+			MainWindow->checkMenu(ID_DISPLAYMETHOD_DIRECTDRAWHW, displayMethod == DISPMETHOD_DDRAW_HW);
+			MainWindow->checkMenu(ID_DISPLAYMETHOD_DIRECTDRAWSW, displayMethod == DISPMETHOD_DDRAW_SW);
+			MainWindow->checkMenu(ID_DISPLAYMETHOD_OPENGL, displayMethod == DISPMETHOD_OPENGL);
+			MainWindow->checkMenu(ID_DISPLAYMETHOD_FILTER, gldisplay.filter);
 
 			MainWindow->checkMenu(IDC_BACKGROUNDPAUSE, lostFocusPause);
 			MainWindow->checkMenu(IDC_BACKGROUNDINPUT, allowBackgroundInput);
@@ -4794,6 +3801,8 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 
 			// Tools
 			MainWindow->checkMenu(IDM_CONSOLE_ALWAYS_ON_TOP, gConsoleTopmost);
+			MainWindow->checkMenu(IDM_CONSOLE_SHOWHIDE, gShowConsole);
+			MainWindow->enableMenu(IDM_CONSOLE_ALWAYS_ON_TOP, gShowConsole);
 
 			UpdateHotkeyAssignments();	//Add current hotkey mappings to menu item names
 
@@ -4888,8 +3897,19 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			else
 				NDS_UnPause();
 			delete MainWindowToolbar;
+			KillTimer(hwnd, autoHideCursorTimer);
 			return 0;
 		}
+	case WM_TIMER:
+	{
+		if (autoHideCursorTimer == wParam)
+		{
+			if(autoHideCursor && !mouseLeftClientArea)
+				if ((IsZoomed(hwnd) && (GetStyle()&DWS_FULLSCREEN)) || fsWindow)
+					while (ShowCursor(FALSE) >= 0);
+		}
+		return 0;
+	}
 	case WM_MOVING:
 		InvalidateRect(hwnd, NULL, FALSE); UpdateWindow(hwnd);
 		return 0;
@@ -4928,6 +3948,8 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 
 			InvalidateRect(hwnd, NULL, FALSE); 
 			UpdateWindow(hwnd);
+			
+			if (fsWindow) return 1;
 
 			if(wParam==999)
 			{
@@ -5111,6 +4133,8 @@ DOKEYDOWN:
 		if(wParam != VK_PAUSE)
 			break;
 	case WM_SYSKEYUP:
+		if (wParam == VK_MENU && GetMenu(hwnd) == NULL)
+			return 0;
 	case WM_CUSTKEYUP:
 		{
 			int modifiers = GetModifiers(wParam);
@@ -5309,6 +4333,14 @@ DOKEYDOWN:
 	case WM_MOUSEMOVE:
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK:
+		if (mouseLeftClientArea)
+		{
+			TrackMouseEvent(&tme);
+			mouseLeftClientArea = false;
+		}
+		while (ShowCursor(TRUE) <= 0);
+		autoHideCursorTimer = SetTimer(hwnd, 1, 10000, NULL);
+
 		if (((message==WM_POINTERDOWN || message== WM_POINTERUPDATE)
 			&& ((wParam & (POINTER_MESSAGE_FLAG_INCONTACT | POINTER_MESSAGE_FLAG_FIRSTBUTTON))))
 			|| (message != WM_POINTERDOWN && message != WM_POINTERUPDATE && (wParam & MK_LBUTTON)))
@@ -5402,6 +4434,9 @@ DOKEYDOWN:
 		userTouchesScreen = false;
 		return 0;
 
+	case WM_MOUSELEAVE:
+		mouseLeftClientArea = true;
+		return 0;
 #if 0
 	case WM_INITMENU: {
 		HMENU menu = (HMENU)wParam;
@@ -5675,17 +4710,18 @@ DOKEYDOWN:
 				ofn.nMaxFile = MAX_PATH;
 				ofn.lpstrDefExt = "dst";
 				ofn.Flags = OFN_HIDEREADONLY | OFN_FILEMUSTEXIST;
-
-				char buffer[MAX_PATH];
-				ZeroMemory(buffer, sizeof(buffer));
-				path.getpath(path.STATES, buffer);
-				ofn.lpstrInitialDir = buffer;
+				std::string dir = path.getpath(path.STATES);
+				ofn.lpstrInitialDir = dir.c_str();
 
 				if(!GetOpenFileName(&ofn))
 				{
 					NDS_UnPause();
 					return 0;
 				}
+
+				dir = Path::GetFileDirectoryPath(SavName);
+				path.setpath(path.STATES, dir);
+				WritePrivateProfileString(SECTION, STATEKEY, dir.c_str(), IniName);
 
 				savestate_load(SavName);
 				UpdateToolWindows();
@@ -5705,17 +4741,19 @@ DOKEYDOWN:
 				ofn.nMaxFile = MAX_PATH;
 				ofn.lpstrDefExt = "dst";
 				ofn.Flags = OFN_NOREADONLYRETURN | OFN_PATHMUSTEXIST;
-
-				char buffer[MAX_PATH];
-				ZeroMemory(buffer, sizeof(buffer));
-				path.getpath(path.STATES, buffer);
-				ofn.lpstrInitialDir = buffer;
+				std::string dir = path.getpath(path.STATES);
+				ofn.lpstrInitialDir = dir.c_str();
 
 				if(GetSaveFileName(&ofn))
 				{
 					savestate_save(SavName);
 					LoadSaveStateInfo();
 				}
+
+				dir = Path::GetFileDirectoryPath(SavName);
+				path.setpath(path.STATES, dir);
+				WritePrivateProfileString(SECTION, STATEKEY, dir.c_str(), IniName);
+
 				if(unpause) NDS_UnPause();
 				return 0;
 			}
@@ -5756,27 +4794,8 @@ DOKEYDOWN:
 			}
 		case IDM_EXPORTBACKUPMEMORY:
 			{
-				OPENFILENAME ofn;
 				NDS_Pause();
-				ZeroMemory(&ofn, sizeof(ofn));
-				ofn.lStructSize = sizeof(ofn);
-				ofn.hwndOwner = hwnd;
-				ofn.lpstrFilter = "Raw Save format (*.sav)\0*.sav\0No$GBA Save format (*.sav)\0*.sav\0\0";
-				ofn.nFilterIndex = 0;
-				ofn.lpstrFile =  ImportSavName;
-				ofn.nMaxFile = MAX_PATH;
-				ofn.lpstrDefExt = "sav";
-				ofn.Flags = OFN_NOREADONLYRETURN | OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
-
-				if(!GetSaveFileName(&ofn))
-				{
-					NDS_UnPause();
-					return 0;
-				}
-
-				if (ofn.nFilterIndex == 2) strcat(ImportSavName, "*");
-
-				if (!MMU_new.backupDevice.exportData(ImportSavName))
+				if (!exportSave(hwnd, hAppInst))
 					MessageBox(hwnd,"Save was not successfully exported","Error",MB_OK);
 				NDS_UnPause();
 				return 0;
@@ -5832,6 +4851,11 @@ DOKEYDOWN:
 			RunConfig(CONFIGSCREEN_HOTKEY);
 			return 0;
 		case IDM_FIRMSETTINGS:
+			if (AreMovieEmulationSettingsActive())
+			{
+				MessageBox(hwnd, "The current settings have been set by a movie. Reset or unload the current game if you want to restore your saved settings.\n\n"
+					"If you make changes here, the new settings will overwrite your currently saved settings.", "Movie Settings Active", MB_OK);
+			}
 			RunConfig(CONFIGSCREEN_FIRMWARE);
 			return 0;
 		case IDM_SOUNDSETTINGS:
@@ -5841,6 +4865,11 @@ DOKEYDOWN:
 			RunConfig(CONFIGSCREEN_WIFI);
 			return 0;
 		case IDM_EMULATIONSETTINGS:
+			if (AreMovieEmulationSettingsActive())
+			{
+				MessageBox(hwnd, "The current settings have been set by a movie. Reset or unload the current game if you want to restore your saved settings.\n\n"
+					"If you make changes here (whether you reset now or not), the new settings will overwrite your currently saved settings.", "Movie Settings Active", MB_OK);
+			}
 			RunConfig(CONFIGSCREEN_EMULATION);
 			return 0;
 		case IDM_MICROPHONESETTINGS:
@@ -5985,19 +5014,17 @@ DOKEYDOWN:
 
 		case ID_LCDS_VERTICAL:
 			if (video.layout == 0) return 0;
-			video.layout = 0;
-			doLCDsLayout();
+			doLCDsLayout(0);
 			return 0;
+
 		case ID_LCDS_HORIZONTAL:
 			if (video.layout == 1) return 0;
-			video.layout = 1;
-			doLCDsLayout();
+			doLCDsLayout(1);
 			return 0;
 
 		case ID_LCDS_ONE:
 			if (video.layout == 2) return 0;
-			video.layout = 2;
-			doLCDsLayout();
+			doLCDsLayout(2);
 			return 0;
 
 		case ID_LCDS_NOSWAP:
@@ -6101,7 +5128,8 @@ DOKEYDOWN:
 		case ID_DISPLAYMETHOD_DIRECTDRAWHW:
 			{
 				Lock lock (win_backbuffer_sync);
-				SetStyle((GetStyle()&~DWS_DISPMETHODS) | DWS_DDRAW_HW);
+				displayMethod = DISPMETHOD_DDRAW_HW;
+				ddraw.systemMemory = false;
 				WritePrivateProfileInt("Video","Display Method", DISPMETHOD_DDRAW_HW, IniName);
 				ddraw.createSurfaces(hwnd);
 			}
@@ -6110,7 +5138,8 @@ DOKEYDOWN:
 		case ID_DISPLAYMETHOD_DIRECTDRAWSW:
 			{
 				Lock lock (win_backbuffer_sync);
-				SetStyle((GetStyle()&~DWS_DISPMETHODS) | DWS_DDRAW_SW);
+				displayMethod = DISPMETHOD_DDRAW_SW;
+				ddraw.systemMemory = true;
 				WritePrivateProfileInt("Video","Display Method", DISPMETHOD_DDRAW_SW, IniName);
 				ddraw.createSurfaces(hwnd);
 			}
@@ -6119,7 +5148,7 @@ DOKEYDOWN:
 		case ID_DISPLAYMETHOD_OPENGL:
 			{
 				Lock lock (win_backbuffer_sync);
-				SetStyle((GetStyle()&~DWS_DISPMETHODS) | DWS_OPENGL);
+				displayMethod = DISPMETHOD_OPENGL;
 				WritePrivateProfileInt("Video","Display Method", DISPMETHOD_OPENGL, IniName);
 			}
 			break;
@@ -6127,8 +5156,8 @@ DOKEYDOWN:
 		case ID_DISPLAYMETHOD_FILTER:
 			{
 				Lock lock (win_backbuffer_sync);
-				SetStyle((GetStyle()^DWS_FILTER));
-				WritePrivateProfileInt("Video","Display Method Filter", (GetStyle()&DWS_FILTER)?1:0, IniName);
+				gldisplay.filter = !gldisplay.filter;
+				WritePrivateProfileInt("Video","Display Method Filter", gldisplay.filter?1:0, IniName);
 			}
 			break;
 
@@ -6337,16 +5366,30 @@ DOKEYDOWN:
 		case IDC_SCR_RATIO_1p4:
 		case IDC_SCR_RATIO_1p5:
 		{
+			u32 style = GetStyle();
+			bool maximized = IsZoomed(hwnd) || fsWindow;
+			if (maximized)
+				RestoreWindow(hwnd);
+
+			float oldScreenSizeRatio = screenSizeRatio;
 			screenSizeRatio = LOWORD(wParam) - IDC_SCR_RATIO_1p0;
 			screenSizeRatio = screenSizeRatio * 0.1 + 1;
 
 			RECT rc;
 			GetClientRect(hwnd, &rc);
-			MainWindow->setClientSize((int)((rc.right - rc.left + 8) / screenSizeRatio), rc.bottom - rc.top);
+			MainWindow->setClientSize((int)((rc.right - rc.left) * (oldScreenSizeRatio / screenSizeRatio)), rc.bottom - rc.top);
 
 			char scrRatStr[4] = "1.0";
 			sprintf(scrRatStr, "%.1f", screenSizeRatio);
 			WritePrivateProfileString("Display", "Screen Size Ratio", scrRatStr, IniName);
+
+			if (maximized)
+			{
+				if (style & DWS_FULLSCREEN)
+					ShowFullScreen(hwnd);
+				else
+					ShowWindow(hwnd, SW_MAXIMIZE);
+			}
 		}
 		return 0;
 
@@ -6365,12 +5408,27 @@ DOKEYDOWN:
 			break;
 
 		case IDC_FORCERATIO:
+		{
+			u32 style = GetStyle();
+			bool maximized = IsZoomed(hwnd) || fsWindow;
+			if (maximized)
+				RestoreWindow(hwnd);
+
 			ForceRatio = (!ForceRatio)?TRUE:FALSE;
 			if((int)(screenSizeRatio * 10) > 10) UpdateWndRects(hwnd);
 			if(ForceRatio)
 				FixAspectRatio();
-			WritePrivateProfileInt("Video","Window Force Ratio",ForceRatio,IniName);
-			break;
+			WritePrivateProfileInt("Video", "Window Force Ratio", ForceRatio, IniName);
+
+			if (maximized)
+			{
+				if (style & DWS_FULLSCREEN)
+					ShowFullScreen(hwnd);
+				else
+					ShowWindow(hwnd, SW_MAXIMIZE);
+			}
+		}	
+		break;
 
 		case IDM_DEFSIZE:
 			{
@@ -6380,6 +5438,11 @@ DOKEYDOWN:
 			break;
 		case IDM_LOCKDOWN:
 			{
+				u32 style = GetStyle();
+				bool maximized = IsZoomed(hwnd) || fsWindow;
+				if (maximized)
+					RestoreWindow(hwnd);
+
 				RECT rc; 
 				GetClientRect(hwnd, &rc);
 
@@ -6388,6 +5451,14 @@ DOKEYDOWN:
 				MainWindow->setClientSize(rc.right-rc.left, rc.bottom-rc.top);
 
 				WritePrivateProfileBool("Video", "Window Lockdown", (GetStyle()&DWS_LOCKDOWN)!=0, IniName);
+
+				if (maximized)
+				{
+					if (style & DWS_FULLSCREEN)
+						ShowFullScreen(hwnd);
+					else
+						ShowWindow(hwnd, SW_MAXIMIZE);
+				}
 			}
 			return 0;
 		case IDM_ALWAYS_ON_TOP:
@@ -6405,10 +5476,28 @@ DOKEYDOWN:
 			}
 			return 0;
 
+		case IDM_CONSOLE_SHOWHIDE:
+		{
+			gShowConsole = !gShowConsole;
+			WritePrivateProfileBool("Console", "Show", gShowConsole, IniName);
+			if(gShowConsole) 
+			{
+				OpenConsole();			// Init debug console
+				ConsoleAlwaysTop(gConsoleTopmost);
+			}
+			else
+			{
+				CloseConsole();
+			}
+			return 0;
+		}
+
 		case IDM_SHOWTOOLBAR:
 			{
-				bool maximized = IsZoomed(hwnd)==TRUE;
-				if(maximized) ShowWindow(hwnd,SW_NORMAL);
+				u32 style = GetStyle();
+				bool maximized = IsZoomed(hwnd) || fsWindow;
+				if (maximized)
+					RestoreWindow(hwnd);
 
 				RECT rc; 
 				GetClientRect(hwnd, &rc); rc.top += MainWindowToolbar->GetHeight();
@@ -6420,9 +5509,49 @@ DOKEYDOWN:
 
 				WritePrivateProfileBool("Display", "Show Toolbar", nowvisible, IniName);
 
-				if(maximized) ShowWindow(hwnd,SW_MAXIMIZE);
+				if (maximized)
+				{
+					if (style & DWS_FULLSCREEN)
+						ShowFullScreen(hwnd);
+					else
+						ShowWindow(hwnd, SW_MAXIMIZE);
+				}
 			}
 			return 0;
+
+		case IDM_FS_MENU:
+			{
+				SetStyle(GetStyle()^DWS_FS_MENU);
+				WritePrivateProfileBool("Display", "Show Menu In Fullscreen Mode", (GetStyle()&DWS_FS_MENU)!= 0, IniName);
+			}
+			return 0;
+
+		case IDM_FS_WINDOW:
+		{
+			u32 style = GetStyle();
+			bool maximized = IsZoomed(hwnd) || fsWindow;
+			if (maximized)
+				RestoreWindow(hwnd);
+
+			SetStyle(GetStyle() ^ DWS_FS_WINDOW);
+			WritePrivateProfileBool("Display", "Non-exclusive Fullscreen Mode", (GetStyle()&DWS_FS_WINDOW) != 0, IniName);
+
+			if (maximized)
+			{
+				if (style & DWS_FULLSCREEN)
+					ShowFullScreen(hwnd);
+				else
+					ShowWindow(hwnd, SW_MAXIMIZE);
+			}
+		}
+		return 0;
+
+		case IDM_FS_HIDE_CURSOR:
+		{
+			autoHideCursor = !autoHideCursor;
+			WritePrivateProfileBool("Display", "Auto-Hide Cursor", autoHideCursor, IniName);
+		}
+		return 0;
 
 		case IDM_AUTODETECTSAVETYPE_INTERNAL: 
 		case IDM_AUTODETECTSAVETYPE_FROMDATABASE: 
@@ -6590,68 +5719,125 @@ LRESULT CALLBACK GFX3DSettingsDlgProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp)
 	{
 	case WM_INITDIALOG:
 		{
-			int i;
+			const char MSAADescriptions[6][9] = {"Disabled", "2x", "4x", "8x", "16x", "32x"};
 
-			CheckDlgButton(hw,IDC_INTERPOLATECOLOR,CommonSettings.GFX3D_HighResolutionInterpolateColor);
-			CheckDlgButton(hw,IDC_3DSETTINGS_EDGEMARK,CommonSettings.GFX3D_EdgeMark);
-			CheckDlgButton(hw,IDC_3DSETTINGS_FOG,CommonSettings.GFX3D_Fog);
-			CheckDlgButton(hw,IDC_3DSETTINGS_TEXTURE,CommonSettings.GFX3D_Texture);
-			CheckDlgButton(hw,IDC_3DSETTINGS_LINEHACK, CommonSettings.GFX3D_LineHack);
-			CheckDlgButton(hw,IDC_3DSETTINGS_ANTIALIASING, CommonSettings.GFX3D_Renderer_Multisample);
-			CheckDlgButton(hw,IDC_TXTHACK, CommonSettings.GFX3D_TXTHack);
+			if (!didGetMaxSamples)
+			{
+				if (cur3DCore != 0 && cur3DCore != 2) //Get max device samples from the current renderer only if it's OpenGL.
+				{
+					maxSamples = CurrentRenderer->GetDeviceInfo().maxSamples;
+					didGetMaxSamples = true;
+				}
+				else
+				{
+					bool isTempContextCreated = windows_opengl_init(); //Create a context just to get max device samples.
+					if (isTempContextCreated) //Creating it here because it's only needed in this window.
+					{
+						GLint maxSamplesOGL = 0;
+#if defined(GL_MAX_SAMPLES)
+						glGetIntegerv(GL_MAX_SAMPLES, &maxSamplesOGL);
+#elif defined(GL_MAX_SAMPLES_EXT)
+						glGetIntegerv(GL_MAX_SAMPLES_EXT, &maxSamplesOGL);
+#endif
+						maxSamples = maxSamplesOGL;
+						didGetMaxSamples = true;
+					}
+				}
+			}
 
-			CheckDlgButton(hw,IDC_TEXSCALE_1, CommonSettings.GFX3D_Renderer_TextureScalingFactor == 1);
-			CheckDlgButton(hw,IDC_TEXSCALE_2, CommonSettings.GFX3D_Renderer_TextureScalingFactor == 2);
-			CheckDlgButton(hw,IDC_TEXSCALE_4, CommonSettings.GFX3D_Renderer_TextureScalingFactor == 4);
-
-			CheckDlgButton(hw, IDC_GPU_24BPP, gpu_bpp == 24);
-			CheckDlgButton(hw, IDC_GPU_18BPP, gpu_bpp == 18);
-			CheckDlgButton(hw, IDC_GPU_15BPP, gpu_bpp == 15);
-
-			CheckDlgButton(hw,IDC_TEX_DEPOSTERIZE, CommonSettings.GFX3D_Renderer_TextureDeposterize);
-			CheckDlgButton(hw,IDC_TEX_SMOOTH, CommonSettings.GFX3D_Renderer_TextureSmoothing);
+			CheckDlgButton(hw, IDC_INTERPOLATECOLOR, CommonSettings.GFX3D_HighResolutionInterpolateColor);
+			CheckDlgButton(hw, IDC_3DSETTINGS_LINEHACK, CommonSettings.GFX3D_LineHack);
+			CheckDlgButton(hw, IDC_TXTHACK, CommonSettings.GFX3D_TXTHack);
+			CheckDlgButton(hw, IDC_TEX_DEPOSTERIZE, CommonSettings.GFX3D_Renderer_TextureDeposterize);
+			CheckDlgButton(hw, IDC_3DSETTINGS_EDGEMARK, CommonSettings.GFX3D_EdgeMark);
+			CheckDlgButton(hw, IDC_3DSETTINGS_FOG, CommonSettings.GFX3D_Fog);
+			CheckDlgButton(hw, IDC_3DSETTINGS_TEXTURE, CommonSettings.GFX3D_Texture);
+			CheckDlgButton(hw, IDC_TEX_SMOOTH, CommonSettings.GFX3D_Renderer_TextureSmoothing);
+			CheckDlgButton(hw, IDC_SHADOW_POLYGONS, CommonSettings.OpenGL_Emulation_ShadowPolygon);
+			CheckDlgButton(hw, IDC_S_0_ALPHA_BLEND, CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending);
+			CheckDlgButton(hw, IDC_DEPTH_EQUALS_TT, CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance);
+			CheckDlgButton(hw, IDC_DEPTH_L_EQUAL_PF, CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing);
 
 			SendDlgItemMessage(hw, IDC_NUD_PRESCALEHD, UDM_SETRANGE, 0, MAKELPARAM(16, 1));
 			SendDlgItemMessage(hw, IDC_NUD_PRESCALEHD, UDM_SETPOS, 0, video.prescaleHD);
 
-			for(i = 0; core3DList[i] != NULL; i++)
+			// Generate the Color Depth pop-up menu
+			ComboBox_AddString(GetDlgItem(hw, IDC_GPU_COLOR_DEPTH), "15 bit");
+			ComboBox_AddString(GetDlgItem(hw, IDC_GPU_COLOR_DEPTH), "18 bit");
+			ComboBox_AddString(GetDlgItem(hw, IDC_GPU_COLOR_DEPTH), "24 bit");
+			ComboBox_SetCurSel(GetDlgItem(hw, IDC_GPU_COLOR_DEPTH), 1);
+			// Generate the Texture Scaling pop-up menu
+			ComboBox_AddString(GetDlgItem(hw, IDC_TEXSCALE), "1x");
+			ComboBox_AddString(GetDlgItem(hw, IDC_TEXSCALE), "2x");
+			ComboBox_AddString(GetDlgItem(hw, IDC_TEXSCALE), "4x");
+			ComboBox_SetCurSel(GetDlgItem(hw, IDC_TEXSCALE), 0);
+
+			for (int i = 0; i < 3; i++)
+			{
+				if (gpu_bpp == possibleBPP[i])
+				{
+					ComboBox_SetCurSel(GetDlgItem(hw, IDC_GPU_COLOR_DEPTH), i);
+				}
+				if (CommonSettings.GFX3D_Renderer_TextureScalingFactor == possibleTexScale[i])
+				{
+					ComboBox_SetCurSel(GetDlgItem(hw, IDC_TEXSCALE), i);
+				}
+			}
+
+			if (CommonSettings.GFX3D_Renderer_MultisampleSize > maxSamples) 
+			{
+				CommonSettings.GFX3D_Renderer_MultisampleSize = maxSamples;
+				WritePrivateProfileInt("3D", "MultisampleSize", maxSamples, IniName);
+			}
+
+			// Generate the MSAA pop-up menu
+			ComboBox_AddString(GetDlgItem(hw, IDC_MULTISAMPLE_SIZE), MSAADescriptions[0]);
+			ComboBox_SetCurSel(GetDlgItem(hw, IDC_MULTISAMPLE_SIZE), 0);
+			for (int i = 1, z = 2; z <= maxSamples; i++, z*=2)
+			{
+				ComboBox_AddString(GetDlgItem(hw, IDC_MULTISAMPLE_SIZE), MSAADescriptions[i]);
+				if (z == CommonSettings.GFX3D_Renderer_MultisampleSize) 
+				{
+					ComboBox_SetCurSel(GetDlgItem(hw, IDC_MULTISAMPLE_SIZE), i);
+				}
+			}
+
+			// Generate the 3D Rendering Engine pop-up menu
+			for (int i = 0; core3DList[i] != NULL; i++)
 			{
 				ComboBox_AddString(GetDlgItem(hw, IDC_3DCORE), core3DList[i]->name);
 			}
 			ComboBox_SetCurSel(GetDlgItem(hw, IDC_3DCORE), cur3DCore);
 		}
 		return TRUE;
-
 	case WM_COMMAND:
 		{
 			switch(LOWORD(wp))
 			{
 			case IDOK:
 				{
-					CommonSettings.GFX3D_HighResolutionInterpolateColor = IsDlgCheckboxChecked(hw,IDC_INTERPOLATECOLOR);
-					CommonSettings.GFX3D_EdgeMark = IsDlgCheckboxChecked(hw,IDC_3DSETTINGS_EDGEMARK);
-					CommonSettings.GFX3D_Fog = IsDlgCheckboxChecked(hw,IDC_3DSETTINGS_FOG);
-					CommonSettings.GFX3D_Texture = IsDlgCheckboxChecked(hw,IDC_3DSETTINGS_TEXTURE);
-					CommonSettings.GFX3D_LineHack = IsDlgCheckboxChecked(hw,IDC_3DSETTINGS_LINEHACK);
-					CommonSettings.GFX3D_Renderer_Multisample = IsDlgCheckboxChecked(hw,IDC_3DSETTINGS_ANTIALIASING);
-					CommonSettings.GFX3D_TXTHack = IsDlgCheckboxChecked(hw,IDC_TXTHACK);
-
+					CommonSettings.GFX3D_HighResolutionInterpolateColor = IsDlgCheckboxChecked(hw, IDC_INTERPOLATECOLOR);
+					CommonSettings.GFX3D_LineHack = IsDlgCheckboxChecked(hw, IDC_3DSETTINGS_LINEHACK);
+					CommonSettings.GFX3D_TXTHack = IsDlgCheckboxChecked(hw, IDC_TXTHACK);
+					gpu_bpp = possibleBPP[SendDlgItemMessage(hw, IDC_GPU_COLOR_DEPTH, CB_GETCURSEL, 0, 0)];
+					CommonSettings.GFX3D_Renderer_TextureScalingFactor = possibleTexScale[SendDlgItemMessage(hw, IDC_TEXSCALE, CB_GETCURSEL, 0, 0)];
+					CommonSettings.GFX3D_Renderer_TextureDeposterize = IsDlgCheckboxChecked(hw, IDC_TEX_DEPOSTERIZE);
+					CommonSettings.GFX3D_EdgeMark = IsDlgCheckboxChecked(hw, IDC_3DSETTINGS_EDGEMARK);
+					CommonSettings.GFX3D_Fog = IsDlgCheckboxChecked(hw, IDC_3DSETTINGS_FOG);
+					CommonSettings.GFX3D_Texture = IsDlgCheckboxChecked(hw, IDC_3DSETTINGS_TEXTURE);
+					CommonSettings.GFX3D_Renderer_MultisampleSize = possibleMSAA[SendDlgItemMessage(hw, IDC_MULTISAMPLE_SIZE, CB_GETCURSEL, 0, 0)];
+					CommonSettings.GFX3D_Renderer_TextureSmoothing = IsDlgCheckboxChecked(hw, IDC_TEX_SMOOTH);
+					CommonSettings.OpenGL_Emulation_ShadowPolygon = IsDlgCheckboxChecked(hw, IDC_SHADOW_POLYGONS);
+					CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending = IsDlgCheckboxChecked(hw, IDC_S_0_ALPHA_BLEND);
+					CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance = IsDlgCheckboxChecked(hw, IDC_DEPTH_EQUALS_TT);
+					CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing = IsDlgCheckboxChecked(hw, IDC_DEPTH_L_EQUAL_PF);
+					
 					int newPrescaleHD = video.prescaleHD;
 					LRESULT scaleResult = SendDlgItemMessage(hw, IDC_NUD_PRESCALEHD, UDM_GETPOS, 0, 0);
 					if (HIWORD(scaleResult) == 0)
 					{
 						newPrescaleHD = LOWORD(scaleResult);
 					}
-
-					if(IsDlgCheckboxChecked(hw,IDC_TEXSCALE_1)) CommonSettings.GFX3D_Renderer_TextureScalingFactor = 1;
-					else if(IsDlgCheckboxChecked(hw,IDC_TEXSCALE_2)) CommonSettings.GFX3D_Renderer_TextureScalingFactor = 2;
-					else if(IsDlgCheckboxChecked(hw,IDC_TEXSCALE_4)) CommonSettings.GFX3D_Renderer_TextureScalingFactor = 4;
-					if(IsDlgCheckboxChecked(hw, IDC_GPU_15BPP)) gpu_bpp = 15;
-					else if(IsDlgCheckboxChecked(hw, IDC_GPU_18BPP)) gpu_bpp = 18;
-					else if(IsDlgCheckboxChecked(hw, IDC_GPU_24BPP)) gpu_bpp = 24;
-
-					CommonSettings.GFX3D_Renderer_TextureDeposterize = IsDlgCheckboxChecked(hw,IDC_TEX_DEPOSTERIZE);
-					CommonSettings.GFX3D_Renderer_TextureSmoothing = IsDlgCheckboxChecked(hw,IDC_TEX_SMOOTH);
 
 					{
 						Lock lock(win_backbuffer_sync);
@@ -6672,24 +5858,27 @@ LRESULT CALLBACK GFX3DSettingsDlgProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp)
 					}
 
 					WritePrivateProfileBool("3D", "HighResolutionInterpolateColor", CommonSettings.GFX3D_HighResolutionInterpolateColor, IniName);
+					WritePrivateProfileBool("3D", "EnableTXTHack", CommonSettings.GFX3D_TXTHack, IniName);
+					WritePrivateProfileBool("3D", "EnableLineHack", CommonSettings.GFX3D_LineHack, IniName);
+					WritePrivateProfileInt ("3D", "PrescaleHD", video.prescaleHD, IniName);
+					WritePrivateProfileInt ("3D", "GpuBpp", gpu_bpp, IniName);
+					WritePrivateProfileInt ("3D", "TextureScalingFactor", CommonSettings.GFX3D_Renderer_TextureScalingFactor, IniName);
+					WritePrivateProfileBool("3D", "TextureDeposterize", CommonSettings.GFX3D_Renderer_TextureDeposterize, IniName);
 					WritePrivateProfileBool("3D", "EnableEdgeMark", CommonSettings.GFX3D_EdgeMark, IniName);
 					WritePrivateProfileBool("3D", "EnableFog", CommonSettings.GFX3D_Fog, IniName);
 					WritePrivateProfileBool("3D", "EnableTexture", CommonSettings.GFX3D_Texture, IniName);
-					WritePrivateProfileInt ("3D", "EnableLineHack", CommonSettings.GFX3D_LineHack, IniName);
-					WritePrivateProfileInt ("3D", "EnableAntiAliasing", CommonSettings.GFX3D_Renderer_Multisample, IniName);
-					WritePrivateProfileInt ("3D", "EnableTXTHack", CommonSettings.GFX3D_TXTHack, IniName);
-					WritePrivateProfileInt ("3D", "PrescaleHD", video.prescaleHD, IniName);
-					WritePrivateProfileInt ("3D", "TextureScalingFactor", CommonSettings.GFX3D_Renderer_TextureScalingFactor, IniName);
-					WritePrivateProfileBool("3D", "TextureDeposterize", CommonSettings.GFX3D_Renderer_TextureDeposterize, IniName);
+					WritePrivateProfileInt ("3D", "MultisampleSize", CommonSettings.GFX3D_Renderer_MultisampleSize, IniName);
 					WritePrivateProfileBool("3D", "TextureSmooth", CommonSettings.GFX3D_Renderer_TextureSmoothing, IniName);
-					WritePrivateProfileInt ("3D", "GpuBpp", gpu_bpp, IniName);
+					WritePrivateProfileBool("3D", "EnableShadowPolygon", CommonSettings.OpenGL_Emulation_ShadowPolygon, IniName);
+					WritePrivateProfileBool("3D", "EnableSpecialZeroAlphaBlending", CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending, IniName);
+					WritePrivateProfileBool("3D", "EnableDepthEqualsTestTolerance", CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance, IniName);
+					WritePrivateProfileBool("3D", "EnableDepthLEqualPolygonFacing", CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing, IniName);
 				}
 			case IDCANCEL:
 				{
 					EndDialog(hw, TRUE);
 				}
 				return TRUE;
-
 			case IDC_DEFAULT:
 				{
 					Change3DCoreWithFallbackAndSave(GPU3D_DEFAULT);
@@ -6751,7 +5940,7 @@ LRESULT CALLBACK EmulationSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			}
 
 			CheckDlgButton(hDlg, IDC_USEEXTFIRMWARE, ((CommonSettings.UseExtFirmware == true) ? BST_CHECKED : BST_UNCHECKED));
-			SetDlgItemText(hDlg, IDC_FIRMWARE, CommonSettings.Firmware);
+			SetDlgItemText(hDlg, IDC_FIRMWARE, CommonSettings.ExtFirmwarePath);
 			CheckDlgButton(hDlg, IDC_FIRMWAREBOOT, ((CommonSettings.BootFromFirmware == true) ? BST_CHECKED : BST_UNCHECKED));
 			CheckDlgButton(hDlg, IDC_FIRMWAREEXTUSER, ((CommonSettings.UseExtFirmwareSettings == true) ? BST_CHECKED : BST_UNCHECKED));
 
@@ -6805,7 +5994,7 @@ LRESULT CALLBACK EmulationSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 					if(romloaded)
 						val = MessageBox(hDlg, "The current ROM needs to be reset to apply changes.\nReset now ?", "DeSmuME", (MB_YESNO | MB_ICONQUESTION));
 
-					
+					UnloadMovieEmulationSettings();
 
 					CommonSettings.UseExtBIOS = IsDlgCheckboxChecked(hDlg, IDC_USEEXTBIOS);
 					cur = GetDlgItem(hDlg, IDC_ARM9BIOS);
@@ -6817,7 +6006,7 @@ LRESULT CALLBACK EmulationSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 
 					CommonSettings.UseExtFirmware = IsDlgCheckboxChecked(hDlg, IDC_USEEXTFIRMWARE);
 					cur = GetDlgItem(hDlg, IDC_FIRMWARE);
-					GetWindowText(cur, CommonSettings.Firmware, 256);
+					GetWindowText(cur, CommonSettings.ExtFirmwarePath, 256);
 					CommonSettings.BootFromFirmware = IsDlgCheckboxChecked(hDlg, IDC_FIRMWAREBOOT);
 					CommonSettings.UseExtFirmwareSettings = IsDlgCheckboxChecked(hDlg, IDC_FIRMWAREEXTUSER);
 
@@ -6845,7 +6034,7 @@ LRESULT CALLBACK EmulationSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 					WritePrivateProfileInt("BIOS", "PatchSWI3", ((CommonSettings.PatchSWI3 == true) ? 1 : 0), IniName);
 
 					WritePrivateProfileInt("Firmware", "UseExtFirmware", ((CommonSettings.UseExtFirmware == true) ? 1 : 0), IniName);
-					WritePrivateProfileString("Firmware", "FirmwareFile", CommonSettings.Firmware, IniName);
+					WritePrivateProfileString("Firmware", "FirmwareFile", CommonSettings.ExtFirmwarePath, IniName);
 					WritePrivateProfileInt("Firmware", "BootFromFirmware", ((CommonSettings.BootFromFirmware == true) ? 1 : 0), IniName);
 					WritePrivateProfileInt("Firmware", "UseExtFirmwareSettings", ((CommonSettings.UseExtFirmwareSettings == true) ? 1 : 0), IniName);
 #ifdef HAVE_JIT
@@ -6917,14 +6106,15 @@ LRESULT CALLBACK EmulationSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 					ofn.nMaxFile = 256;
 					ofn.lpstrDefExt = "bin";
 					ofn.Flags = OFN_NOCHANGEDIR | OFN_HIDEREADONLY | OFN_FILEMUSTEXIST;
-
-					char buffer[MAX_PATH];
-					ZeroMemory(buffer, sizeof(buffer));
-					path.getpath(path.FIRMWARE, buffer);
-					ofn.lpstrInitialDir = buffer;
+					std::string dir = path.getpath(path.FIRMWARE);
+					ofn.lpstrInitialDir = dir.c_str();
 
 					if(GetOpenFileName(&ofn))
 					{
+						std::string dir = Path::GetFileDirectoryPath(fileName);
+						path.setpath(path.FIRMWARE, dir);
+						WritePrivateProfileString(SECTION, FIRMWAREKEY, dir.c_str(), IniName);
+
 						HWND cur;
 
 						switch(LOWORD(wParam))
@@ -7036,14 +6226,15 @@ LRESULT CALLBACK MicrophoneSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, 
 					ofn.nMaxFile = 256;
 					ofn.lpstrDefExt = "wav";
 					ofn.Flags = OFN_NOCHANGEDIR | OFN_HIDEREADONLY | OFN_FILEMUSTEXIST;
-
-					char buffer[MAX_PATH];
-					ZeroMemory(buffer, sizeof(buffer));
-					path.getpath(path.SOUNDS, buffer);
-					ofn.lpstrInitialDir = buffer;
+					std::string dir = path.getpath(path.SOUNDS);
+					ofn.lpstrInitialDir = dir.c_str();
 
 					if(GetOpenFileName(&ofn))
 					{
+						std::string dir = Path::GetFileDirectoryPath(fileName);
+						path.setpath(path.SOUNDS, dir);
+						WritePrivateProfileString(SECTION, SOUNDKEY, dir.c_str(), IniName);
+
 						HWND cur;
 
 						switch(LOWORD(wParam))
@@ -7063,68 +6254,73 @@ LRESULT CALLBACK MicrophoneSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, 
 	return FALSE;
 }
 
-#ifdef EXPERIMENTAL_WIFI_COMM
 LRESULT CALLBACK WifiSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+	const bool isPCapSupported = wifiHandler->IsPCapSupported();
+	const WifiEmulationLevel emulationLevel = wifiHandler->GetSelectedEmulationLevel();
+
 	switch(uMsg)
 	{
 	case WM_INITDIALOG:
 		{
-			char errbuf[PCAP_ERRBUF_SIZE];
-			pcap_if_t *alldevs;
-			pcap_if_t *d;
-			int i;
-			HWND cur;
-
-			if (wifiEmulationLevel > WifiEmulationLevel_Off)
+#ifdef EXPERIMENTAL_WIFI_COMM
+			if (emulationLevel != WifiEmulationLevel_Off)
 			{
-				CheckDlgItem(hDlg, IDC_WIFI_ENABLED, true);
-				CheckDlgItem(hDlg, IDC_WIFI_COMPAT, wifiEmulationLevel == WifiEmulationLevel_Compatibility);
+				CheckDlgItem(hDlg, IDC_WIFI_ENABLED, TRUE);
+				CheckDlgItem(hDlg, IDC_WIFI_COMPAT, (emulationLevel == WifiEmulationLevel_Compatibility));
 			}
 			else
 			{
-				CheckDlgItem(hDlg, IDC_WIFI_ENABLED, false);
-				CheckDlgItem(hDlg, IDC_WIFI_COMPAT, GetPrivateProfileBool("Wifi", "Compatibility Mode", false, IniName));
+				CheckDlgItem(hDlg, IDC_WIFI_ENABLED, FALSE);
+				CheckDlgItem(hDlg, IDC_WIFI_COMPAT, GetPrivateProfileBool("Wifi", "Compatibility Mode", FALSE, IniName));
+			}
+#else
+			CheckDlgItem(hDlg, IDC_WIFI_ENABLED, FALSE);
+			CheckDlgItem(hDlg, IDC_WIFI_COMPAT, FALSE);
+			EnableWindow(GetDlgItem(hDlg, IDC_WIFI_ENABLED), FALSE);
+			EnableWindow(GetDlgItem(hDlg, IDC_WIFI_COMPAT), FALSE);
+#endif
+
+			HWND deviceMenu = GetDlgItem(hDlg, IDC_BRIDGEADAPTER);
+			int menuItemCount = ComboBox_GetCount(deviceMenu);
+			std::vector<std::string> deviceStringList;
+			int curSel = 0;
+			BOOL enableWin = FALSE;
+			
+			for (int i = 0; i < menuItemCount; i++)
+			{
+				ComboBox_DeleteString(deviceMenu, 0);
 			}
 
-			if (bSocketsAvailable && bWinPCapAvailable)
-				CheckRadioButton(hDlg, IDC_WIFIMODE0, IDC_WIFIMODE1, IDC_WIFIMODE0 + CommonSettings.wifi.mode);
-			else if(bSocketsAvailable)
-				CheckRadioButton(hDlg, IDC_WIFIMODE0, IDC_WIFIMODE1, IDC_WIFIMODE0);
-			else if(bWinPCapAvailable)
-				CheckRadioButton(hDlg, IDC_WIFIMODE0, IDC_WIFIMODE1, IDC_WIFIMODE1);
-
-			if (bWinPCapAvailable)
+			if (isPCapSupported)
 			{
-				if(driver->PCAP_findalldevs(&alldevs, errbuf) == -1)
-				{
-					// TODO: fail more gracefully!
-					EndDialog(hDlg, TRUE);
-					return TRUE;
-				}
+				int deviceCount = wifiHandler->GetBridgeDeviceList(&deviceStringList);
 
-				cur = GetDlgItem(hDlg, IDC_BRIDGEADAPTER);
-				for(i = 0, d = alldevs; d != NULL; i++, d = d->next)
+				if (deviceCount < 0)
 				{
-					char buf[256] = {0};
-					// on x64 description is empty
-					if (d->description[0] == 0)
-						strcpy(buf, d->name);
-					else
-						strcpy(buf, d->description);
-
-					ComboBox_AddString(cur, buf);
+					ComboBox_AddString(deviceMenu, "Error: Searching for a device failed.");
 				}
-				ComboBox_SetCurSel(cur, CommonSettings.wifi.infraBridgeAdapter);
+				else if (deviceCount == 0)
+				{
+					ComboBox_AddString(deviceMenu, "No devices were found.");
+				}
+				else
+				{
+					for (size_t i = 0; i < deviceCount; i++)
+					{
+						ComboBox_AddString(deviceMenu, deviceStringList[i].c_str());
+					}
+					curSel = CommonSettings.WifiBridgeDeviceID;
+					enableWin = TRUE;
+				}
 			}
 			else
 			{
-				EnableWindow(GetDlgItem(hDlg, IDC_WIFIMODE1), FALSE);
-				EnableWindow(GetDlgItem(hDlg, IDC_BRIDGEADAPTER), FALSE);
+				ComboBox_AddString(deviceMenu, "Error: Could not load WinPcap.");
 			}
-
-			if (!bSocketsAvailable)
-				EnableWindow(GetDlgItem(hDlg, IDC_WIFIMODE0), FALSE);
+			ComboBox_SetCurSel(deviceMenu, curSel);
+			EnableWindow(deviceMenu, enableWin);
+			
 		}
 		return TRUE;
 
@@ -7140,28 +6336,27 @@ LRESULT CALLBACK WifiSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
 					if(romloaded)
 						val = MessageBox(hDlg, "The current ROM needs to be reset to apply changes.\nReset now ?", "DeSmuME", (MB_YESNO | MB_ICONQUESTION));
 
-					if (IsDlgCheckboxChecked(hDlg, IDC_WIFI_ENABLED)) 
+#ifdef EXPERIMENTAL_WIFI_COMM
+					if (IsDlgCheckboxChecked(hDlg, IDC_WIFI_ENABLED))
 					{
 						if (IsDlgCheckboxChecked(hDlg, IDC_WIFI_COMPAT))
-							wifiEmulationLevel = WifiEmulationLevel_Compatibility;
+							wifiHandler->SetEmulationLevel(WifiEmulationLevel_Compatibility);
 						else
-							wifiEmulationLevel = WifiEmulationLevel_Normal;
+							wifiHandler->SetEmulationLevel(WifiEmulationLevel_Normal);
 					}
 					else
-						wifiEmulationLevel = WifiEmulationLevel_Off;
+						wifiHandler->SetEmulationLevel(WifiEmulationLevel_Off);
 
 					WritePrivateProfileBool("Wifi", "Enabled", IsDlgCheckboxChecked(hDlg, IDC_WIFI_ENABLED), IniName);
 					WritePrivateProfileBool("Wifi", "Compatibility Mode", IsDlgCheckboxChecked(hDlg, IDC_WIFI_COMPAT), IniName);
-
-					if (IsDlgButtonChecked(hDlg, IDC_WIFIMODE0))
-						CommonSettings.wifi.mode = 0;
-					else
-						CommonSettings.wifi.mode = 1;
-					WritePrivateProfileInt("Wifi", "Mode", CommonSettings.wifi.mode, IniName);
+#else
+					wifiHandler->SetEmulationLevel(WifiEmulationLevel_Off);
+#endif
 
 					cur = GetDlgItem(hDlg, IDC_BRIDGEADAPTER);
-					CommonSettings.wifi.infraBridgeAdapter = ComboBox_GetCurSel(cur);
-					WritePrivateProfileInt("Wifi", "BridgeAdapter", CommonSettings.wifi.infraBridgeAdapter, IniName);
+					CommonSettings.WifiBridgeDeviceID = ComboBox_GetCurSel(cur);
+					wifiHandler->SetBridgeDeviceIndex(CommonSettings.WifiBridgeDeviceID);
+					WritePrivateProfileInt("Wifi", "BridgeAdapter", CommonSettings.WifiBridgeDeviceID, IniName);
 
 					if(val == IDYES)
 					{
@@ -7180,7 +6375,6 @@ LRESULT CALLBACK WifiSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
 
 	return FALSE;
 }
-#endif
 
 static void SoundSettings_updateVolumeReadout(HWND hDlg)
 {
@@ -7584,161 +6778,6 @@ void WIN_InstallGBACartridge()
 	GBACartridge_SRAMPath = Path::GetFileNameWithoutExt(win32_GBA_cfgRomPath) + "." + GBA_SRAM_FILE_EXT;
 }
 
-// ================================================================= DDraw
-u32	DDRAW::create(HWND hwnd)
-{
-	if (handle) return 0;
-
-	if (FAILED(DirectDrawCreateEx(NULL, (LPVOID*)&handle, IID_IDirectDraw7, NULL)))
-		return 1;
-
-	if (FAILED(handle->SetCooperativeLevel(hwnd, DDSCL_NORMAL)))
-		return 2;
-
-	createSurfaces(hwnd);
-
-	return 0;
-}
-
-bool DDRAW::release()
-{
-	if (!handle) return true;
-	
-	if (clip != NULL)  clip->Release();
-	if (surface.back != NULL) surface.back->Release();
-	if (surface.primary != NULL) surface.primary->Release();
-
-	if (FAILED(handle->Release())) return false;
-	return true;
-}
-
-bool DDRAW::createBackSurface(int width, int height)
-{
-	if (surface.back) { surface.back->Release(); surface.back = NULL; }
-
-	bool hw = (GetStyle()&DWS_DDRAW_HW)!=0;
-	bool sw = (GetStyle()&DWS_DDRAW_SW)!=0;
-
-	if(!hw && !sw) return true;
-
-	memset(&surfDescBack, 0, sizeof(surfDescBack));
-	surfDescBack.dwSize          = sizeof(surfDescBack);
-	surfDescBack.dwFlags         = DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH;
-	surfDescBack.ddsCaps.dwCaps  = DDSCAPS_OFFSCREENPLAIN;
-	
-	if(sw)
-		surfDescBack.ddsCaps.dwCaps |= DDSCAPS_SYSTEMMEMORY;
-	else
-		surfDescBack.ddsCaps.dwCaps |= DDSCAPS_VIDEOMEMORY;
-
-	
-	surfDescBack.dwWidth         = width;
-	surfDescBack.dwHeight        = height;
-
-	if (FAILED(handle->CreateSurface(&surfDescBack, &surface.back, NULL))) return false;
-
-	return true;
-}
-
-bool DDRAW::createSurfaces(HWND hwnd)
-{
-	if (!handle) return true;
-
-	if (clip) { clip->Release(); clip = NULL; }
-	if (surface.primary) { surface.primary->Release();  surface.primary = NULL; }
-
-
-	// primary
-	memset(&surfDesc, 0, sizeof(surfDesc));
-	surfDesc.dwSize = sizeof(surfDesc);
-	surfDesc.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
-	surfDesc.dwFlags = DDSD_CAPS;
-	if (FAILED(handle->CreateSurface(&surfDesc, &surface.primary, NULL)))
-		return false;
-
-	//default doesnt matter much, itll get adjusted later
-	if(!createBackSurface(GPU_FRAMEBUFFER_NATIVE_WIDTH, GPU_FRAMEBUFFER_NATIVE_HEIGHT * 2))
-		return false;
-
-	if (FAILED(handle->CreateClipper(0, &clip, NULL))) return false;
-	if (FAILED(clip->SetHWnd(0, hwnd))) return false;
-	if (FAILED(surface.primary->SetClipper(clip))) return false;
-
-	backbuffer_invalidate = false;
-
-	return true;
-}
-
-bool DDRAW::lock()
-{
-	if (!handle) return true;
-	if (!surface.back) return false;
-	memset(&surfDescBack, 0, sizeof(surfDescBack));
-	surfDescBack.dwSize = sizeof(surfDescBack);
-	surfDescBack.dwFlags = DDSD_ALL;
-
-	HRESULT res = surface.back->Lock(NULL, &surfDescBack, DDLOCK_WAIT | DDLOCK_WRITEONLY, NULL);
-	if (FAILED(res))
-	{
-		//INFO("DDraw failed: Lock %i\n", res);
-		if (res == DDERR_SURFACELOST)
-		{
-			res = surface.back->Restore();
-			if (FAILED(res)) return false;
-		}
-	}
-	return true;
-}
-
-bool DDRAW::unlock()
-{
-	if (!handle) return true;
-	if (!surface.back) return false;
-	if (FAILED(surface.back->Unlock((LPRECT)surfDescBack.lpSurface))) return false;
-	return true;
-}
-
-bool DDRAW::OK()
-{
-	if (!handle) return false;
-	if (!surface.primary) return false;
-	if (!surface.back) return false;
-	return true;
-}
-
-bool DDRAW::blt(LPRECT dst, LPRECT src)
-{
-	if (!handle) return true;
-	if (!surface.primary) return false;
-	if (!surface.back) return false;
-
-	if(GetStyle()&DWS_VSYNC)
-	{
-		//this seems to block the whole process. this destroys the display thread and will easily block the emulator to 30fps.
-		//IDirectDraw7_WaitForVerticalBlank(handle,DDWAITVB_BLOCKBEGIN,0);
-		
-		for(;;)
-		{
-			BOOL vblank;
-			IDirectDraw7_GetVerticalBlankStatus(handle,&vblank);
-			if(vblank) break;
-			//must be a greedy loop since vblank is small relative to 1msec minimum Sleep() resolution.
-		}
-	}
-
-	HRESULT res = surface.primary->Blt(dst, surface.back, src, DDBLT_WAIT, 0);
-	if (FAILED(res))
-	{
-		//INFO("DDraw failed: Blt %i\n", res);
-		if (res == DDERR_SURFACELOST)
-		{
-			res = surface.primary->Restore();
-			if (FAILED(res)) return false;
-		}
-	}
-	return true;
-}
-
 void SetStyle(u32 dws)
 {
 	//pokefan's suggestion, there are a number of ways we could do this.
@@ -7749,11 +6788,13 @@ void SetStyle(u32 dws)
 		ws |= WS_POPUP | WS_DLGFRAME;
 	else if (!(dws&DWS_FULLSCREEN))
 		ws |= WS_CAPTION | WS_THICKFRAME;
+	else if(dws & DWS_FS_WINDOW)
+		ws |= WS_POPUPWINDOW;
 
 	SetWindowLong(MainWindow->getHWnd(), GWL_STYLE, ws);
 
 
-	if ((dws&DWS_FULLSCREEN))
+	if ((dws&DWS_FULLSCREEN) && !(dws&DWS_FS_MENU))
 		SetMenu(MainWindow->getHWnd(), NULL);
 	else
 		SetMenu(MainWindow->getHWnd(), mainMenu);
@@ -7765,4 +6806,5 @@ void SetStyle(u32 dws)
 	SetWindowPos(MainWindow->getHWnd(), insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
 
 	gldisplay.setvsync(!!(GetStyle()&DWS_VSYNC));
+	ddraw.vSync = GetStyle()&DWS_VSYNC;
 }

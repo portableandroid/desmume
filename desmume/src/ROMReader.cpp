@@ -25,6 +25,7 @@
 #include <zzip/zzip.h>
 #endif
 
+#include "utils/xstring.h"
 #include "streams/file_stream_transforms.h"
 
 #if defined(_WIN32) && defined(_MSVC_VER) 
@@ -79,7 +80,21 @@ struct STDROMReaderData
 
 void* STDROMReaderInit(const char* filename)
 {
-	FILE* inf = (FILE*)fopen(filename, "rb");
+#ifndef _MSC_VER
+	struct stat sb;
+	if (stat(filename, &sb) == -1)
+		return 0;
+
+ 	if ((sb.st_mode & S_IFMT) != S_IFREG)
+		return 0;
+#endif
+	
+#ifdef WIN32
+	FILE* inf = _wfopen(mbstowcs((std::string)filename).c_str(),L"rb");
+#else
+	FILE* inf = fopen(filename, "rb");
+#endif
+	
 	if(!inf) return NULL;
 
 	STDROMReaderData* ret = new STDROMReaderData();
@@ -102,7 +117,7 @@ u32 STDROMReaderSize(void * file)
 
 	if (!file) return 0;
 
-	FILE* inf = ((STDROMReaderData*)file)->file;
+	FILE* inf = (FILE *)((STDROMReaderData*)file)->file;
 
 	fseek(inf, 0, SEEK_END);
 	size = ftell(inf);
@@ -224,12 +239,13 @@ void * ZIPROMReaderInit(const char * filename)
 	ZZIP_DIRENT * dirent = zzip_readdir(dir);
 	if (dir != NULL)
 	{
-		char tmp1[1024];
+		char *tmp1;
 		char tmp2[1024];
-		memset(tmp1,0,sizeof(tmp1));
+
 		memset(tmp2,0,sizeof(tmp2));
-		strncpy(tmp1, filename, strlen(filename) - 4);
+		tmp1 = strndup(filename, strlen(filename) - 4);
 		sprintf(tmp2, "%s/%s", tmp1, dirent->d_name);
+		free(tmp1);
 		return zzip_fopen(tmp2, "rb");
 	}
 	return NULL;

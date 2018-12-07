@@ -24,16 +24,16 @@
 #include "../../rasterize.h"
 
 #ifdef MAC_OS_X_VERSION_10_7
-#include "../../OGLRender_3_2.h"
+	#include "../../OGLRender_3_2.h"
 #else
-#include "../../OGLRender.h"
+	#include "../../OGLRender.h"
 #endif
 
 #include <OpenGL/OpenGL.h>
 #import "userinterface/MacOGLDisplayView.h"
 
 #ifdef ENABLE_APPLE_METAL
-#import "userinterface/MacMetalDisplayView.h"
+	#import "userinterface/MacMetalDisplayView.h"
 #endif
 
 #ifdef BOOL
@@ -93,6 +93,8 @@ public:
 @dynamic gpuScale;
 @dynamic gpuColorFormat;
 
+@synthesize openglDeviceMaxMultisamples;
+
 @dynamic layerMainGPU;
 @dynamic layerMainBG0;
 @dynamic layerMainBG1;
@@ -113,11 +115,16 @@ public:
 @dynamic render3DTextures;
 @dynamic render3DThreads;
 @dynamic render3DLineHack;
-@dynamic render3DMultisample;
+@dynamic render3DMultisampleSize;
+@synthesize render3DMultisampleSizeString;
 @dynamic render3DTextureDeposterize;
 @dynamic render3DTextureSmoothing;
 @dynamic render3DTextureScalingFactor;
 @dynamic render3DFragmentSamplingHack;
+@dynamic openGLEmulateShadowPolygon;
+@dynamic openGLEmulateSpecialZeroAlphaBlending;
+@dynamic openGLEmulateDepthEqualsTestTolerance;
+@dynamic openGLEmulateDepthLEqualPolygonFacing;
 
 #ifdef ENABLE_SHARED_FETCH_OBJECT
 @synthesize fetchObject;
@@ -192,6 +199,27 @@ public:
 	GPU->SetWillAutoResolveToCustomBuffer(false);
 #endif
 	
+	openglDeviceMaxMultisamples = 0;
+	render3DMultisampleSizeString = @"Off";
+	
+	bool isTempContextCreated = OSXOpenGLRendererInit();
+	if (isTempContextCreated)
+	{
+		OSXOpenGLRendererBegin();
+		GLint maxSamplesOGL = 0;
+		
+#if defined(GL_MAX_SAMPLES)
+		glGetIntegerv(GL_MAX_SAMPLES, &maxSamplesOGL);
+#elif defined(GL_MAX_SAMPLES_EXT)
+		glGetIntegerv(GL_MAX_SAMPLES_EXT, &maxSamplesOGL);
+#endif
+		
+		openglDeviceMaxMultisamples = maxSamplesOGL;
+		
+		OSXOpenGLRendererEnd();
+		DestroyOpenGLRenderer();
+	}
+	
 	return self;
 }
 
@@ -201,6 +229,8 @@ public:
 	
 	delete fetchObject;
 	delete gpuEvent;
+	
+	[self setRender3DMultisampleSizeString:nil];
 	
 	[super dealloc];
 }
@@ -470,7 +500,7 @@ public:
 	
 	CommonSettings.num_cores = numberCores;
 	
-	if (renderingEngineID == RENDERID_SOFTRASTERIZER)
+	if (renderingEngineID == CORE3DLIST_SWRASTERIZE)
 	{
 		GPU->Set3DRendererByID(renderingEngineID);
 	}
@@ -503,20 +533,113 @@ public:
 	return state;
 }
 
-- (void) setRender3DMultisample:(BOOL)state
+- (void) setRender3DMultisampleSize:(NSUInteger)msaaSize
 {
 	gpuEvent->ApplyRender3DSettingsLock();
-	CommonSettings.GFX3D_Renderer_Multisample = state ? true : false;
-	gpuEvent->ApplyRender3DSettingsUnlock();
-}
-
-- (BOOL) render3DMultisample
-{
-	gpuEvent->ApplyRender3DSettingsLock();
-	const BOOL state = CommonSettings.GFX3D_Renderer_Multisample ? YES : NO;
+	
+	const int currentMSAASize = CommonSettings.GFX3D_Renderer_MultisampleSize;
+	
+	if (currentMSAASize != msaaSize)
+	{
+		switch (currentMSAASize)
+		{
+			case 0:
+			{
+				if (msaaSize == (currentMSAASize+1))
+				{
+					msaaSize = 2;
+				}
+				break;
+			}
+				
+			case 2:
+			{
+				if (msaaSize == (currentMSAASize-1))
+				{
+					msaaSize = 0;
+				}
+				else if (msaaSize == (currentMSAASize+1))
+				{
+					msaaSize = 4;
+				}
+				break;
+			}
+				
+			case 4:
+			{
+				if (msaaSize == (currentMSAASize-1))
+				{
+					msaaSize = 2;
+				}
+				else if (msaaSize == (currentMSAASize+1))
+				{
+					msaaSize = 8;
+				}
+				break;
+			}
+				
+			case 8:
+			{
+				if (msaaSize == (currentMSAASize-1))
+				{
+					msaaSize = 4;
+				}
+				else if (msaaSize == (currentMSAASize+1))
+				{
+					msaaSize = 16;
+				}
+				break;
+			}
+				
+			case 16:
+			{
+				if (msaaSize == (currentMSAASize-1))
+				{
+					msaaSize = 8;
+				}
+				else if (msaaSize == (currentMSAASize+1))
+				{
+					msaaSize = 32;
+				}
+				break;
+			}
+				
+			case 32:
+			{
+				if (msaaSize == (currentMSAASize-1))
+				{
+					msaaSize = 16;
+				}
+				else if (msaaSize == (currentMSAASize+1))
+				{
+					msaaSize = 32;
+				}
+				break;
+			}
+		}
+		
+		if (msaaSize > openglDeviceMaxMultisamples)
+		{
+			msaaSize = openglDeviceMaxMultisamples;
+		}
+		
+		msaaSize = GetNearestPositivePOT(msaaSize);
+		CommonSettings.GFX3D_Renderer_MultisampleSize = msaaSize;
+	}
+	
 	gpuEvent->ApplyRender3DSettingsUnlock();
 	
-	return state;
+	NSString *newMsaaSizeString = (msaaSize == 0) ? @"Off" : [NSString stringWithFormat:@"%d", (int)msaaSize];
+	[self setRender3DMultisampleSizeString:newMsaaSizeString];
+}
+
+- (NSUInteger) render3DMultisampleSize
+{
+	gpuEvent->ApplyRender3DSettingsLock();
+	const NSInteger msaaSize = (NSUInteger)CommonSettings.GFX3D_Renderer_MultisampleSize;
+	gpuEvent->ApplyRender3DSettingsUnlock();
+	
+	return msaaSize;
 }
 
 - (void) setRender3DTextureDeposterize:(BOOL)state
@@ -595,6 +718,70 @@ public:
 {
 	gpuEvent->ApplyRender3DSettingsLock();
 	const BOOL state = CommonSettings.GFX3D_TXTHack ? YES : NO;
+	gpuEvent->ApplyRender3DSettingsUnlock();
+	
+	return state;
+}
+
+- (void) setOpenGLEmulateShadowPolygon:(BOOL)state
+{
+	gpuEvent->ApplyRender3DSettingsLock();
+	CommonSettings.OpenGL_Emulation_ShadowPolygon = (state) ? true : false;
+	gpuEvent->ApplyRender3DSettingsUnlock();
+}
+
+- (BOOL) openGLEmulateShadowPolygon
+{
+	gpuEvent->ApplyRender3DSettingsLock();
+	const BOOL state = (CommonSettings.OpenGL_Emulation_ShadowPolygon) ? YES : NO;
+	gpuEvent->ApplyRender3DSettingsUnlock();
+	
+	return state;
+}
+
+- (void) setOpenGLEmulateSpecialZeroAlphaBlending:(BOOL)state
+{
+	gpuEvent->ApplyRender3DSettingsLock();
+	CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending = (state) ? true : false;
+	gpuEvent->ApplyRender3DSettingsUnlock();
+}
+
+- (BOOL) openGLEmulateSpecialZeroAlphaBlending
+{
+	gpuEvent->ApplyRender3DSettingsLock();
+	const BOOL state = (CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending) ? YES : NO;
+	gpuEvent->ApplyRender3DSettingsUnlock();
+	
+	return state;
+}
+
+- (void) setOpenGLEmulateDepthEqualsTestTolerance:(BOOL)state
+{
+	gpuEvent->ApplyRender3DSettingsLock();
+	CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance = (state) ? true : false;
+	gpuEvent->ApplyRender3DSettingsUnlock();
+}
+
+- (BOOL) openGLEmulateDepthEqualsTestTolerance
+{
+	gpuEvent->ApplyRender3DSettingsLock();
+	const BOOL state = (CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance) ? YES : NO;
+	gpuEvent->ApplyRender3DSettingsUnlock();
+	
+	return state;
+}
+
+- (void) setOpenGLEmulateDepthLEqualPolygonFacing:(BOOL)state
+{
+	gpuEvent->ApplyRender3DSettingsLock();
+	CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing = (state) ? true : false;
+	gpuEvent->ApplyRender3DSettingsUnlock();
+}
+
+- (BOOL) openGLEmulateDepthLEqualPolygonFacing
+{
+	gpuEvent->ApplyRender3DSettingsLock();
+	const BOOL state = (CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing) ? YES : NO;
 	gpuEvent->ApplyRender3DSettingsUnlock();
 	
 	return state;
@@ -1116,24 +1303,6 @@ public:
 		}
 	}
 	
-	// As a last resort, search for any buffer that is not currently writing, and then force wait
-	// on its corresponding semaphore.
-	if (stillSearching)
-	{
-		selectedIndex = (selectedIndex + 1) % pageCount;
-		for (; selectedIndex != currentIndex; selectedIndex = (selectedIndex + 1) % pageCount)
-		{
-			if ( ([self framebufferStateAtIndex:selectedIndex] == ClientDisplayBufferState_Idle) ||
-				 ([self framebufferStateAtIndex:selectedIndex] == ClientDisplayBufferState_Ready) ||
-				 ([self framebufferStateAtIndex:selectedIndex] == ClientDisplayBufferState_Reading) ||
-				 ([self framebufferStateAtIndex:selectedIndex] == ClientDisplayBufferState_PendingRead) )
-			{
-				stillSearching = false;
-				break;
-			}
-		}
-	}
-	
 	return selectedIndex;
 }
 
@@ -1213,11 +1382,13 @@ public:
 	}
 }
 
-- (void) flushAllDisplaysOnDisplayLink:(CVDisplayLinkRef)displayLink timeStamp:(const CVTimeStamp *)timeStamp
+- (void) flushAllDisplaysOnDisplayLink:(CVDisplayLinkRef)displayLink timeStampNow:(const CVTimeStamp *)timeStampNow timeStampOutput:(const CVTimeStamp *)timeStampOutput
 {
 	pthread_rwlock_t *currentRWLock = _rwlockOutputList;
 	CGDirectDisplayID displayID = CVDisplayLinkGetCurrentCGDisplay(displayLink);
 	bool didFlushOccur = false;
+	
+	std::vector<ClientDisplay3DView *> cdvFlushList;
 	
 	if (currentRWLock != NULL)
 	{
@@ -1234,11 +1405,18 @@ public:
 				
 				if (cdv->GetViewNeedsFlush())
 				{
-					cdv->FlushView();
-					didFlushOccur = true;
+					cdvFlushList.push_back(cdv);
 				}
 			}
 		}
+	}
+	
+	const size_t listSize = cdvFlushList.size();
+	
+	if (listSize > 0)
+	{
+		[self flushMultipleViews:cdvFlushList timeStampNow:timeStampNow timeStampOutput:timeStampOutput];
+		didFlushOccur = true;
 	}
 	
 	if (currentRWLock != NULL)
@@ -1249,11 +1427,28 @@ public:
 	if (didFlushOccur)
 	{
 		// Set the new time limit to 8 seconds after the current time.
-		_displayLinkFlushTimeList[displayID] = timeStamp->videoTime + (timeStamp->videoTimeScale * VIDEO_FLUSH_TIME_LIMIT_OFFSET);
+		_displayLinkFlushTimeList[displayID] = timeStampNow->videoTime + (timeStampNow->videoTimeScale * VIDEO_FLUSH_TIME_LIMIT_OFFSET);
 	}
-	else if (timeStamp->videoTime > _displayLinkFlushTimeList[displayID])
+	else if (timeStampNow->videoTime > _displayLinkFlushTimeList[displayID])
 	{
 		CVDisplayLinkStop(displayLink);
+	}
+}
+
+- (void) flushMultipleViews:(const std::vector<ClientDisplay3DView *> &)cdvFlushList timeStampNow:(const CVTimeStamp *)timeStampNow timeStampOutput:(const CVTimeStamp *)timeStampOutput
+{
+	const size_t listSize = cdvFlushList.size();
+	
+	for (size_t i = 0; i < listSize; i++)
+	{
+		ClientDisplay3DView *cdv = (ClientDisplay3DView *)cdvFlushList[i];
+		cdv->FlushView(NULL);
+	}
+	
+	for (size_t i = 0; i < listSize; i++)
+	{
+		ClientDisplay3DView *cdv = (ClientDisplay3DView *)cdvFlushList[i];
+		cdv->FinalizeFlush(NULL, timeStampOutput->hostTime);
 	}
 }
 
@@ -1297,8 +1492,7 @@ public:
 		if (!isDisplayLinkStillActive)
 		{
 			CVDisplayLinkRef newDisplayLink;
-			CVDisplayLinkCreateWithActiveCGDisplays(&newDisplayLink);
-			CVDisplayLinkSetCurrentCGDisplay(newDisplayLink, displayID);
+			CVDisplayLinkCreateWithCGDisplay(displayID, &newDisplayLink);
 			CVDisplayLinkSetOutputCallback(newDisplayLink, &MacDisplayLinkCallback, self);
 			
 			_displayLinksActiveList[displayID] = newDisplayLink;
@@ -1568,7 +1762,7 @@ CVReturn MacDisplayLinkCallback(CVDisplayLinkRef displayLink,
 								void *displayLinkContext)
 {
 	MacClientSharedObject *sharedData = (MacClientSharedObject *)displayLinkContext;
-	[sharedData flushAllDisplaysOnDisplayLink:displayLink timeStamp:inNow];
+	[sharedData flushAllDisplaysOnDisplayLink:displayLink timeStampNow:inNow timeStampOutput:inOutputTime];
 	
 	return kCVReturnSuccess;
 }
@@ -1577,14 +1771,13 @@ CVReturn MacDisplayLinkCallback(CVDisplayLinkRef displayLink,
 
 bool OSXOpenGLRendererInit()
 {
-	static bool isContextAlreadyCreated = false;
-	
-	if (!isContextAlreadyCreated)
+	bool isContextCreated = (OSXOpenGLRendererContext != NULL);
+	if (!isContextCreated)
 	{
-		isContextAlreadyCreated = CreateOpenGLRenderer();
+		isContextCreated = CreateOpenGLRenderer();
 	}
 	
-	return true;
+	return isContextCreated;
 }
 
 bool OSXOpenGLRendererBegin()

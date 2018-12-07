@@ -23,6 +23,7 @@
 #include <mach/semaphore.h>
 #include <mach/sync_policy.h>
 #include <map>
+#include <vector>
 
 #import "cocoa_util.h"
 #include "../../GPU.h"
@@ -57,6 +58,7 @@ enum ClientDisplayBufferState
 };
 
 class GPUEventHandlerOSX;
+class ClientDisplay3DView;
 
 #ifdef ENABLE_SHARED_FETCH_OBJECT
 
@@ -102,7 +104,9 @@ typedef std::map<CGDirectDisplayID, int64_t> DisplayLinkFlushTimeLimitMap;
 - (void) incrementViewsUsingDirectToCPUFiltering;
 - (void) decrementViewsUsingDirectToCPUFiltering;
 - (void) pushVideoDataToAllDisplayViews;
-- (void) flushAllDisplaysOnDisplayLink:(CVDisplayLinkRef)displayLink timeStamp:(const CVTimeStamp *)timeStamp;
+
+- (void) flushAllDisplaysOnDisplayLink:(CVDisplayLinkRef)displayLink timeStampNow:(const CVTimeStamp *)timeStampNow timeStampOutput:(const CVTimeStamp *)timeStampOutput;
+- (void) flushMultipleViews:(const std::vector<ClientDisplay3DView *> &)cdvFlushList timeStampNow:(const CVTimeStamp *)timeStampNow timeStampOutput:(const CVTimeStamp *)timeStampOutput;
 
 - (void) displayLinkStartUsingID:(CGDirectDisplayID)displayID;
 - (void) displayLinkListUpdate;
@@ -119,6 +123,8 @@ typedef std::map<CGDirectDisplayID, int64_t> DisplayLinkFlushTimeLimitMap;
 {
 	UInt32 gpuStateFlags;
 	uint8_t _gpuScale;
+	NSUInteger openglDeviceMaxMultisamples;
+	NSString *render3DMultisampleSizeString;
 	BOOL isCPUCoreCountAuto;
 	BOOL _needRestoreRender3DLock;
 	
@@ -132,6 +138,8 @@ typedef std::map<CGDirectDisplayID, int64_t> DisplayLinkFlushTimeLimitMap;
 @property (assign) NSSize gpuDimensions;
 @property (assign) NSUInteger gpuScale;
 @property (assign) NSUInteger gpuColorFormat;
+
+@property (readonly) NSUInteger openglDeviceMaxMultisamples;
 
 @property (assign) BOOL layerMainGPU;
 @property (assign) BOOL layerMainBG0;
@@ -153,11 +161,16 @@ typedef std::map<CGDirectDisplayID, int64_t> DisplayLinkFlushTimeLimitMap;
 @property (assign) BOOL render3DTextures;
 @property (assign) NSUInteger render3DThreads;
 @property (assign) BOOL render3DLineHack;
-@property (assign) BOOL render3DMultisample;
+@property (assign) NSUInteger render3DMultisampleSize;
+@property (retain) NSString *render3DMultisampleSizeString;
 @property (assign) BOOL render3DTextureDeposterize;
 @property (assign) BOOL render3DTextureSmoothing;
 @property (assign) NSUInteger render3DTextureScalingFactor;
 @property (assign) BOOL render3DFragmentSamplingHack;
+@property (assign) BOOL openGLEmulateShadowPolygon;
+@property (assign) BOOL openGLEmulateSpecialZeroAlphaBlending;
+@property (assign) BOOL openGLEmulateDepthEqualsTestTolerance;
+@property (assign) BOOL openGLEmulateDepthLEqualPolygonFacing;
 
 #ifdef ENABLE_SHARED_FETCH_OBJECT
 @property (readonly, nonatomic) GPUClientFetchObject *fetchObject;

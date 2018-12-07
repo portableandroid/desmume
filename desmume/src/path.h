@@ -78,7 +78,9 @@ public:
 
 	#define ROMKEY			"Roms"
 	#define BATTERYKEY		"Battery"
+	#define SRAMIMPORTKEY	"SramImportExport"
 	#define STATEKEY		"States"
+	#define STATESLOTKEY	"StateSlots"
 	#define SCREENSHOTKEY	"Screenshots"
 	#define AVIKEY			"AviFiles"
 	#define CHEATKEY		"Cheats"
@@ -99,7 +101,9 @@ public:
 		FIRSTKNOWNPATH = 0,
 		ROMS = 0,
 		BATTERY,
-		STATES, 
+		SRAM_IMPORT_EXPORT,
+		STATES,
+		STATE_SLOTS,
 		SCREENSHOTS,
 		AVI_FILES,
 		CHEATS,
@@ -112,7 +116,9 @@ public:
 
 	char pathToRoms[MAX_PATH];
 	char pathToBattery[MAX_PATH];
+	char pathToSramImportExport[MAX_PATH];
 	char pathToStates[MAX_PATH];
+	char pathToStateSlots[MAX_PATH];
 	char pathToScreenshots[MAX_PATH];
 	char pathToAviFiles[MAX_PATH];
 	char pathToCheats[MAX_PATH];
@@ -124,70 +130,7 @@ public:
 
 	void init(const char *filename);
 
-	void LoadModulePath()
-	{
-#if !defined(__LIBRETRO__) && defined(HOST_WINDOWS)
-
-		char *p;
-		ZeroMemory(pathToModule, sizeof(pathToModule));
-
-		GetModuleFileName(NULL, pathToModule, sizeof(pathToModule));
-		p = pathToModule + lstrlen(pathToModule);
-		while (p >= pathToModule && *p != DIRECTORY_DELIMITER_CHAR) p--;
-		if (++p >= pathToModule) *p = 0;
-
-		extern char* _hack_alternateModulePath;
-		if(_hack_alternateModulePath)
-		{
-			strcpy(pathToModule,_hack_alternateModulePath);
-		}
-#elif !defined(__LIBRETRO__) && defined(DESMUME_COCOA)
-		std::string pathStr = Path::GetFileDirectoryPath(path);
-
-		strncpy(pathToModule, pathStr.c_str(), MAX_PATH);
-#elif defined(__LIBRETRO__)
-		const char *saveDir = 0;
-		environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &saveDir);
-#if !defined(VITA)
-		strncpy(pathToModule, saveDir ? saveDir : ".", MAX_PATH);
-#else
-		strncpy(pathToModule, saveDir ? saveDir : "", MAX_PATH);
-#endif
-	        if(saveDir == 0 && log_cb)
-	        {
-	           log_cb(RETRO_LOG_WARN, "Save directory is not defined. Fallback on using SYSTEM directory ...\n");
-
-		   const char* systemDir = 0;
-                   environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &systemDir);
-#if !defined(VITA)
-	           strncpy(pathToModule, systemDir ? systemDir : ".", MAX_PATH);
-#else
-	           strncpy(pathToModule, systemDir ? systemDir : "", MAX_PATH);
-#endif
-	           if(systemDir == 0 && log_cb)
-        	       log_cb(RETRO_LOG_WARN, "System directory is not defined. Fallback to ROM dir\n");	  
-
-      		}
-#else
-                const char *xdg_config_home = getenv("XDG_CONFIG_HOME");
-                const char *home            = getenv("HOME");
-                std::string pathStr;
-
-                if (xdg_config_home)
-                {
-                    pathStr = std::string(xdg_config_home) + DIRECTORY_DELIMITER_CHAR + "desmume";
-                }
-                else if (home)
-                {
-                    pathStr = std::string(home) + DIRECTORY_DELIMITER_CHAR + ".config" + DIRECTORY_DELIMITER_CHAR + "desmume";
-                }
-                else
-                    pathStr = Path::GetFileDirectoryPath(path);
-
-		path_mkdir(pathStr.c_str());
-		strncpy(pathToModule, pathStr.c_str(), MAX_PATH);
-#endif
-	}
+	void LoadModulePath();
 
 	enum Action
 	{
@@ -195,174 +138,27 @@ public:
 		SET
 	};
 
-	void GetDefaultPath(char *pathToDefault, const char *key, int maxCount)
-	{
-#if !defined(__LIBRETRO__) && defined(HOST_WINDOWS)
-		std::string temp = (std::string)"." + DIRECTORY_DELIMITER_CHAR + pathToDefault;
-		strncpy(pathToDefault, temp.c_str(), maxCount);
-#else
-		strncpy(pathToDefault, pathToModule, maxCount);
-#endif
-	}
+	void GetDefaultPath(char *pathToDefault, const char *key, int maxCount);
 
-	void ReadKey(char *pathToRead, const char *key)
-	{
-#if !defined(__LIBRETRO__) && defined(HOST_WINDOWS)
-		GetPrivateProfileString(SECTION, key, key, pathToRead, MAX_PATH, IniName);
-		if(strcmp(pathToRead, key) == 0) {
-			//since the variables are all intialized in this file they all use MAX_PATH
-			GetDefaultPath(pathToRead, key, MAX_PATH);
-		}
-#else
-		//since the variables are all intialized in this file they all use MAX_PATH
-		GetDefaultPath(pathToRead, key, MAX_PATH);
-#endif
-	}
+	void ReadKey(char *pathToRead, const char *key);
 
-	void ReadPathSettings()
-	{
-		if( ( strcmp(pathToModule, "") == 0) || !pathToModule)
-			LoadModulePath();
+	void ReadPathSettings();
 
-		ReadKey(pathToRoms, ROMKEY);
-		ReadKey(pathToBattery, BATTERYKEY);
-		ReadKey(pathToStates, STATEKEY);
-		ReadKey(pathToScreenshots, SCREENSHOTKEY);
-		ReadKey(pathToAviFiles, AVIKEY);
-		ReadKey(pathToCheats, CHEATKEY);
-		ReadKey(pathToSounds, SOUNDKEY);
-		ReadKey(pathToFirmware, FIRMWAREKEY);
-		ReadKey(pathToLua, LUAKEY);
-		ReadKey(pathToSlot1D, SLOT1DKEY);
-#if !defined(__LIBRETRO__) && defined(HOST_WINDOWS)
-		GetPrivateProfileString(SECTION, FORMATKEY, "%f_%s_%r", screenshotFormat, MAX_FORMAT, IniName);
-		savelastromvisit	= GetPrivateProfileBool(SECTION, LASTVISITKEY, true, IniName);
-		currentimageformat	= (ImageFormat)GetPrivateProfileInt(SECTION, DEFAULTFORMATKEY, PNG, IniName);
-		r4Format = (R4Format)GetPrivateProfileInt(SECTION, R4FORMATKEY, R4_CHEAT_DAT, IniName);
-		if ((r4Format != R4_CHEAT_DAT) && (r4Format != R4_USRCHEAT_DAT))
-		{
-			r4Format = R4_USRCHEAT_DAT;
-			WritePrivateProfileInt(SECTION, R4FORMATKEY, r4Format, IniName);
-		}
-#endif
-	/*
-		needsSaving		= GetPrivateProfileInt(SECTION, NEEDSSAVINGKEY, TRUE, IniName);
-		if(needsSaving)
-		{
-			needsSaving = FALSE;
-			WritePathSettings();
-		}*/
-	}
+	void SwitchPath(Action action, KnownPath path, char *buffer);
 
-	void SwitchPath(Action action, KnownPath path, char *buffer)
-	{
-		char *pathToCopy = 0;
-		switch(path)
-		{
-		case ROMS:
-			pathToCopy = pathToRoms;
-			break;
-		case BATTERY:
-			pathToCopy = pathToBattery;
-			break;
-		case STATES:
-			pathToCopy = pathToStates;
-			break;
-		case SCREENSHOTS:
-			pathToCopy = pathToScreenshots;
-			break;
-		case AVI_FILES:
-			pathToCopy = pathToAviFiles;
-			break;
-		case CHEATS:
-			pathToCopy = pathToCheats;
-			break;
-		case SOUNDS:
-			pathToCopy = pathToSounds;
-			break;
-		case FIRMWARE:
-			pathToCopy = pathToFirmware;
-			break;
-		case MODULE:
-			pathToCopy = pathToModule;
-			break;
-		case SLOT1D:
-			pathToCopy = pathToSlot1D;
-			break;
-		}
+	std::string getpath(KnownPath path);
+	void getpath(KnownPath path, char *buffer);
 
-		if(action == GET)
-		{
-			std::string thePath = pathToCopy;
-			std::string relativePath = (std::string)"." + DIRECTORY_DELIMITER_CHAR;
-			
-			int len = (int)thePath.size()-1;
+	void setpath(KnownPath path, std::string value);
+	void setpath(KnownPath path, char *buffer);
 
-			if(len == -1)
-				thePath = relativePath;
-			else 
-				if(thePath[len] != DIRECTORY_DELIMITER_CHAR) 
-					thePath += DIRECTORY_DELIMITER_CHAR;
-	
-			if(!Path::IsPathRooted(thePath))
-			{
-				thePath = (std::string)pathToModule + thePath;
-			}
+	void getfilename(char *buffer, int maxCount);
 
-			strncpy(buffer, thePath.c_str(), MAX_PATH);
-			#ifdef HOST_WINDOWS
-			FCEUD_MakePathDirs(buffer);
-			#endif
-		}
-		else if(action == SET)
-		{
-			int len = strlen(buffer)-1;
-			if(buffer[len] == DIRECTORY_DELIMITER_CHAR) 
-				buffer[len] = '\0';
+	void getpathnoext(KnownPath path, char *buffer);
 
-			strncpy(pathToCopy, buffer, MAX_PATH);
-		}
-	}
+	std::string extension();
 
-	std::string getpath(KnownPath path)
-	{
-		char temp[MAX_PATH];
-		SwitchPath(GET, path, temp);
-		return temp;
-	}
-
-	void getpath(KnownPath path, char *buffer)
-	{
-		SwitchPath(GET, path, buffer);
-	}
-
-	void setpath(KnownPath path, char *buffer)
-	{
-		SwitchPath(SET, path, buffer);
-	}
-
-	void getfilename(char *buffer, int maxCount)
-	{
-		strcpy(buffer,noextension().c_str());
-	}
-
-	void getpathnoext(KnownPath path, char *buffer)
-	{
-		getpath(path, buffer);
-		strcat(buffer, GetRomNameWithoutExtension().c_str());
-	}
-
-	std::string extension()
-	{
-		return Path::GetFileExt(path);
-	}
-
-	std::string noextension()
-	{
-		std::string romNameWithPath = Path::GetFileDirectoryPath(path) + DIRECTORY_DELIMITER_CHAR + Path::GetFileNameWithoutExt(RomName);
-		
-		return romNameWithPath;
-	}
+	std::string noextension();
 
 	void formatname(char *output);
 
@@ -381,45 +177,15 @@ public:
 
 	ImageFormat currentimageformat;
 
-	ImageFormat imageformat() {
-		return currentimageformat;
-	}
+	ImageFormat imageformat();
 
-	void SetRomName(const char *filename)
-	{
-		std::string romPath = filename;
+	void SetRomName(const char *filename);
 
-		RomName = Path::GetFileNameFromPath(romPath);
-		RomName = Path::ScrubInvalid(RomName);
-		RomDirectory = Path::GetFileDirectoryPath(romPath);
-	}
+	const char *GetRomName();
 
-	const char *GetRomName()
-	{
-		return RomName.c_str();
-	}
+	std::string GetRomNameWithoutExtension();
 
-	std::string GetRomNameWithoutExtension()
-	{
-		if (RomName.c_str() == NULL)
-			return "";
-		return Path::GetFileNameWithoutExt(RomName);
-	}
-
-	bool isdsgba(std::string fileName)
-	{
-		size_t i = fileName.find_last_of(FILE_EXT_DELIMITER_CHAR);
-		
-		if (i != std::string::npos) {
-			fileName = fileName.substr(i - 2);
-		}
-		
-		if(fileName == "ds.gba") {
-			return true;
-		}
-		
-		return false;
-	}
+	bool isdsgba(std::string fileName);
 };
 
 extern PathInfo path;

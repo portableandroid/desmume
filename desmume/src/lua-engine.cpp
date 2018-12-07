@@ -20,6 +20,7 @@
 #if defined(WIN32)
 	#include <windows.h>
 	#include <direct.h>
+	#include <MMSystem.h>
 
 	typedef HMENU PlatformMenu;    // hMenu
 	#define MAX_MENU_COUNT (IDC_LUAMENU_RESERVE_END - IDC_LUAMENU_RESERVE_START + 1)
@@ -1760,7 +1761,18 @@ DEFINE_LUA_FUNCTION(emu_frameadvance, "")
 
 	return StepEmulationAtSpeed(L, info.speedMode, true);
 }
-
+DEFINE_LUA_FUNCTION(emu_gamecode, "")
+{
+	char tmp[5] = {gameInfo.header.gameCode[0],gameInfo.header.gameCode[1],gameInfo.header.gameCode[2],gameInfo.header.gameCode[3],0};
+	lua_pushstring(L,tmp);
+	return 1;
+}
+DEFINE_LUA_FUNCTION(emu_smallgamecode, "")
+{
+	char tmp[4] = {gameInfo.header.gameCode[0],gameInfo.header.gameCode[1],gameInfo.header.gameCode[2],0};
+	lua_pushstring(L,tmp);
+	return 1;
+}
 DEFINE_LUA_FUNCTION(emu_pause, "")
 {
 	driver->EMU_PauseEmulation(true);
@@ -3832,6 +3844,38 @@ DEFINE_LUA_FUNCTION(emu_registermenustart, "func")
 	return 1;
 }
 
+DEFINE_LUA_FUNCTION(emu_set3dtransform, "mode, matrix")
+{
+	extern int freelookMode;
+	extern s32 freelookMatrix[16];
+
+	int mode = luaL_checkinteger(L,1);
+	freelookMode = mode;
+	if(mode == 2 || mode == 3)
+	{
+		for(int i=0;i<16;i++)
+		{
+			lua_rawgeti(L, 2, i+1);
+			freelookMatrix[i] = (s32)(lua_tonumber(L,-1)*(1<<12));
+			lua_pop(L,1);
+		}
+	}
+
+	return 0;
+}
+
+DEFINE_LUA_FUNCTION(emu_register3devent, "func")
+{
+	if (!lua_isnil(L,1))
+		luaL_checktype(L, 1, LUA_TFUNCTION);
+	lua_settop(L,1);
+	lua_getfield(L, LUA_REGISTRYINDEX, luaCallIDStrings[LUACALL_REGISTER3DEVENT]);
+	lua_insert(L,1);
+	lua_setfield(L, LUA_REGISTRYINDEX, luaCallIDStrings[LUACALL_REGISTER3DEVENT]);
+	StopScriptIfFinished(luaStateToUIDMap[L->l_G->mainthread]);
+	return 1;
+}
+
 // TODO
 /*
 DEFINE_LUA_FUNCTION(emu_loadrom, "filename")
@@ -4626,6 +4670,124 @@ DEFINE_LUA_FUNCTION(stylus_write, "table")
 	return 0;
 }
 
+#if defined(_WIN32)
+	const char* s_dpadDirections[4] = {"up", "right", "down", "left"};
+	const char* s_buttonNames[33] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32"};
+#endif
+// this function takes two optional variables
+// joystickID: a value (0-15) that identifies the controller to read; default is 0 which is the "preferred device" set in the control panel
+// returnDiagonals: a boolean (true/false) that determines whether or not to return diagonal values from a supported D-pad; default is false, which ignores diagonal values
+DEFINE_LUA_FUNCTION(controller_get, "[joystickID = 0 [,returnDiagonals = false]]") {
+	unsigned int i_joystickID = 0;bool f_returnDiagonals = 0; // initialize optional variables
+	switch (lua_gettop(L)) { // get number of arguments
+		case 1:
+			i_joystickID = lua_tonumber(L,1);
+			break;
+		case 2:
+			i_joystickID = lua_tonumber(L,1);
+			if (lua_isboolean(L,2)) { // only accept true/false
+				f_returnDiagonals = lua_toboolean(L,2);
+			}
+			break;
+	}
+	lua_newtable(L); // create new empty table
+
+	JOYCAPS joycaps;
+	MMRESULT joygetdevcaps_result = joyGetDevCaps(i_joystickID, &joycaps, sizeof(joycaps)); // get controller's joystick (dpad) capabilities and number of buttons
+	if (joygetdevcaps_result != JOYERR_NOERROR) {return 1;} // joystick doesn't exist so return an empty table
+
+	JOYINFOEX joyinfoex;
+	joyinfoex.dwSize = sizeof(joyinfoex);
+	joyinfoex.dwFlags = JOY_RETURNBUTTONS | JOY_RETURNPOV;
+	MMRESULT joygetposex_result = joyGetPosEx(i_joystickID, &joyinfoex); // query joystick's pov and buttons
+	if (joygetposex_result != JOYERR_NOERROR) {return 1;} // joystick doesn't exist so return an empty table
+
+	bool dpad[4] = {0,0,0,0}; // up, right, down, left;
+	if ((joycaps.wCaps & JOYCAPS_HASPOV) && (joycaps.wCaps & JOYCAPS_POV4DIR)) { // confirm joystick has a pov that supports discrete values
+		if (joyinfoex.dwPOV != JOY_POVCENTERED) { // dpad is neutral
+			if (!(joyinfoex.dwPOV % 9000)) { // dpad is not currently on a diagonal so don't bother checking them
+				dpad[(joyinfoex.dwPOV / 4500)/2] = true; // divide by 2 to ignore diagonals
+			} else if (f_returnDiagonals) { // get the diagonal values if asked
+				switch (joyinfoex.dwPOV) {
+					case 4500: // up/right
+						dpad[0] = true;
+						dpad[1] = true;
+						break;
+					case 13500: // down/right
+						dpad[2] = true;
+						dpad[1] = true;
+						break;
+					case 22500: // down/left
+						dpad[2] = true;
+						dpad[3] = true;
+						break;
+					case 31500: // up/left
+						dpad[0] = true;
+						dpad[3] = true;
+						break;
+				}
+			}
+
+		}
+	} else {
+		// there is no supported dpad so all dpad booleans will default to false
+		// should add support for JOYCAPS_POVCTS here but my three test controllers don't use it; unsure if it's even needed
+	}
+
+	for (int i = 0; i < 4; i++) { // add dpad data to the table
+		lua_pushboolean(L, dpad[i]); // dpad direction isPressed
+		lua_setfield(L, -2, s_dpadDirections[i]); // dpad direction name
+	}
+
+	int pow = 1; // joyinfoex.dwButtons is the total value of all pressed buttons; button values are powers of 2, starting with 2^0 for button 1
+	for (unsigned int i = 1; i <= joycaps.wNumButtons; i++) { // add button data to the table
+		lua_pushboolean(L, (joyinfoex.dwButtons & pow) ? (true) : (false)); // button isPressed
+		lua_setfield(L, -2, s_buttonNames[i]); // button number
+		pow *= 2;
+	}
+
+	// add all available joystick axes to the table; axes will be scaled from -1 to 1
+	double scaledpos;
+	#define SCALEAXIS(pos, srcmin, srcmax, dstmin, dstmax) ((pos - srcmin) * (dstmax - dstmin) / (srcmax - srcmin) + dstmin)
+	if (joycaps.wNumAxes > 0) {
+		scaledpos = SCALEAXIS(joyinfoex.dwXpos, joycaps.wXmin, joycaps.wXmax, -1.0, 1.0);
+		lua_pushnumber(L, scaledpos);
+		lua_setfield(L, -2, "x");
+	}
+	if (joycaps.wNumAxes > 1) {
+		scaledpos = SCALEAXIS(joyinfoex.dwYpos, joycaps.wYmin, joycaps.wYmax, -1.0, 1.0);
+		lua_pushnumber(L, scaledpos);
+		lua_setfield(L, -2, "y");
+	}
+	if (joycaps.wCaps & JOYCAPS_HASZ) {
+		scaledpos = SCALEAXIS(joyinfoex.dwZpos, joycaps.wZmin, joycaps.wZmax, -1.0, 1.0);
+		lua_pushnumber(L, scaledpos);
+		lua_setfield(L, -2, "z");
+	}
+	if (joycaps.wCaps & JOYCAPS_HASR) {
+		scaledpos = SCALEAXIS(joyinfoex.dwRpos, joycaps.wRmin, joycaps.wRmax, -1.0, 1.0);
+		lua_pushnumber(L, scaledpos);
+		lua_setfield(L, -2, "r");
+	}
+	if (joycaps.wCaps & JOYCAPS_HASU) {
+		scaledpos = SCALEAXIS(joyinfoex.dwUpos, joycaps.wUmin, joycaps.wUmax, -1.0, 1.0);
+		lua_pushnumber(L, scaledpos);
+		lua_setfield(L, -2, "u");
+	}
+	if (joycaps.wCaps & JOYCAPS_HASV) {
+		scaledpos = SCALEAXIS(joyinfoex.dwVpos, joycaps.wVmin, joycaps.wVmax, -1.0, 1.0);
+		lua_pushnumber(L, scaledpos);
+		lua_setfield(L, -2, "v");
+	}
+
+	return 1; // return the table
+}
+static const struct luaL_reg controllerlib [] = {
+	{"get", controller_get},
+	{"read", controller_get},
+	{NULL, NULL}
+};
+
 static int gcEMUFILE_MEMORY(lua_State *L)
 {
 	EMUFILE_MEMORY** ppEmuFile = (EMUFILE_MEMORY**)luaL_checkudata(L, 1, "EMUFILE_MEMORY*");
@@ -4649,6 +4811,8 @@ static const struct luaL_reg styluslib [] =
 static const struct luaL_reg emulib [] =
 {
 	{"frameadvance", emu_frameadvance},
+	{"gamecode", emu_gamecode},
+	{"smallgamecode", emu_smallgamecode},
 	{"speedmode", emu_speedmode},
 	{"wait", emu_wait},
 	{"pause", emu_pause},
@@ -4676,6 +4840,8 @@ static const struct luaL_reg emulib [] =
 	{"addmenu", emu_addmenu},
 	{"setmenuiteminfo", emu_setmenuiteminfo},
 	{"registermenustart", emu_registermenustart},
+	{"register3devent", emu_register3devent},
+	{"set3dtransform", emu_set3dtransform},
 	// alternative names
 //	{"openrom", emu_loadrom},
 	{NULL, NULL}
@@ -4989,6 +5155,9 @@ void registerLibs(lua_State* L)
 	luaL_register(L, "agg", aggbasicshapes);
 	luaL_register(L, "agg", agggeneralattributes);
 	luaL_register(L, "agg", aggcustom);
+
+	luaL_register(L, "controller", controllerlib);
+
 	
 	lua_settop(L, 0); // clean the stack, because each call to luaL_register leaves a table on top
 	
@@ -5685,7 +5854,7 @@ bool AnyLuaActive()
 	return false;
 }
 
-void CallRegisteredLuaFunctions(LuaCallID calltype)
+void _CallRegisteredLuaFunctions(LuaCallID calltype, int (*beforeCallback)(lua_State*, void*), void* beforeCallbackArg)
 {
 	assert((unsigned int)calltype < (unsigned int)LUACALL_COUNT);
 	const char* idstring = luaCallIDStrings[calltype];
@@ -5722,7 +5891,9 @@ void CallRegisteredLuaFunctions(LuaCallID calltype)
 				bool wasRunning = info.running;
 				info.running = true;
 				RefreshScriptSpeedStatus();
-				int errorcode = lua_pcall(L, 0, 0, 0);
+				int nargs = 0;
+				if(beforeCallback) nargs = beforeCallback(L,beforeCallbackArg);
+				int errorcode = lua_pcall(L, nargs, 0, 0);
 				info.running = wasRunning;
 				RefreshScriptSpeedStatus();
 				if (errorcode)
@@ -5744,6 +5915,45 @@ void CallRegisteredLuaFunctions(LuaCallID calltype)
 
 		++iter;
 	}
+}
+
+void CallRegisteredLuaFunctions(LuaCallID calltype)
+{
+	_CallRegisteredLuaFunctions(calltype, NULL, NULL);
+}
+
+static struct {
+	int which;
+	void* arg;
+} todo3devent;
+
+int CallRegistered3dEvent_callback(lua_State* L, void* userarg)
+{
+	if(todo3devent.which == 0)
+	{
+		float* mat = (float*)todo3devent.arg;
+		lua_newtable(L);
+		for(int i=0;i<16;i++)
+		{
+			lua_pushnumber(L,mat[i]);
+			lua_rawseti(L,-2,i+1);
+		}
+		lua_setfield(L,LUA_GLOBALSINDEX,"registered3devent_arg");
+
+		lua_pushnumber(L,todo3devent.which);
+		lua_setfield(L,LUA_GLOBALSINDEX,"registered3devent_which");
+
+		return 0;
+	}
+
+	return 0;
+}
+
+void CallRegistered3dEvent(int which, void* arg)
+{
+	todo3devent.which = which;
+	todo3devent.arg = arg;
+	_CallRegisteredLuaFunctions(LUACALL_REGISTER3DEVENT, &CallRegistered3dEvent_callback, NULL);
 }
 
 void CallRegisteredLuaSaveFunctions(int savestateNumber, LuaSaveData& saveData)

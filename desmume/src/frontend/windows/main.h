@@ -28,6 +28,7 @@ extern WINCLASS	*MainWindow;
 extern HINSTANCE hAppInst;
 extern HMENU mainMenu; //Holds handle to the main DeSmuME menu
 extern CToolBar* MainWindowToolbar;
+extern CRITICAL_SECTION win_backbuffer_sync;
 
 extern volatile bool execute, paused;
 extern bool romloaded;
@@ -47,6 +48,12 @@ void WavEnd();
 void UpdateToolWindows();
 bool DemandLua();
 void SetRotate(HWND hwnd, int rot, bool user = true);
+void SaveWindowPos(HWND hwnd);
+void SaveWindowSize(HWND hwnd);
+void SaveWindowSizePos(HWND hwnd);
+void RestoreWindow(HWND hwnd);
+void ShowFullScreen(HWND hwnd);
+int GetValid3DIntSetting(char *settingName, const int defVal, const int arrName[], const int arrSize);
 
 extern bool frameCounterDisplay;
 extern bool FpsDisplay;
@@ -92,5 +99,7 @@ void WIN_InstallGBACartridge();
 #define IDT_VIEW_MATRIX                 		50010
 #define IDT_VIEW_LIGHTS                 		50011
 #define IDM_EXEC								50112
+
+#define WM_CUSTINVOKE							WM_USER+52
 
 #endif

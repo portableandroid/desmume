@@ -283,8 +283,7 @@ static float normalTable[1024];
 #define fix10_2float(v) (((float)((s32)(v))) / (float)(1<<9))
 
 // Color buffer that is filled by the 3D renderer and is read by the GPU engine.
-static FragmentColor *_gfx3d_colorMain = NULL;
-static u16 *_gfx3d_color16 = NULL;
+static CACHE_ALIGN FragmentColor _gfx3d_savestateBuffer[GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
 
 // Matrix stack handling
 //TODO: decouple stack pointers from matrix stack type
@@ -348,6 +347,9 @@ static u16 dsDiffuse, dsAmbient, dsSpecular, dsEmission;
 //used for indexing the shininess table during parameters to shininess command
 static u8 shininessInd = 0;
 
+// "Freelook" related things
+int freelookMode = 0;
+s32 freelookMatrix[16];
 
 //-----------cached things:
 //these dont need to go into the savestate. they can be regenerated from HW registers
@@ -606,6 +608,7 @@ void gfx3d_reset()
 	memset(gxPIPE.param, 0, sizeof(gxPIPE.param));
 	memset(colorRGB, 0, sizeof(colorRGB));
 	memset(&tempVertInfo, 0, sizeof(tempVertInfo));
+	memset(_gfx3d_savestateBuffer, 0, GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT * sizeof(u32));
 
 	MatrixInit(mtxCurrent[MATRIXMODE_PROJECTION]);
 	MatrixInit(mtxCurrent[MATRIXMODE_POSITION]);
@@ -743,8 +746,27 @@ static void SetVertex()
 	if(polylist->count >= POLYLIST_SIZE) 
 			return;
 
-	GEM_TransformVertex(mtxCurrent[MATRIXMODE_POSITION], coordTransformed); //modelview
-	GEM_TransformVertex(mtxCurrent[MATRIXMODE_PROJECTION], coordTransformed); //projection
+	if(freelookMode == 2)
+	{
+		//adjust projection
+		s32 tmp[16];
+		MatrixCopy(tmp,mtxCurrent[MATRIXMODE_PROJECTION]);
+		MatrixMultiply(tmp, freelookMatrix);
+		GEM_TransformVertex(mtxCurrent[MATRIXMODE_POSITION], coordTransformed); //modelview
+		GEM_TransformVertex(tmp, coordTransformed); //projection
+	}
+	else if(freelookMode == 3)
+	{
+		//use provided projection
+		GEM_TransformVertex(mtxCurrent[MATRIXMODE_POSITION], coordTransformed); //modelview
+		GEM_TransformVertex(freelookMatrix, coordTransformed); //projection
+	}
+	else
+	{
+		//no freelook
+		GEM_TransformVertex(mtxCurrent[MATRIXMODE_POSITION], coordTransformed); //modelview
+		GEM_TransformVertex(mtxCurrent[MATRIXMODE_PROJECTION], coordTransformed); //projection
+	}
 
 	//TODO - culling should be done here.
 	//TODO - viewport transform?
@@ -904,6 +926,17 @@ static void SetVertex()
 	}
 }
 
+static void UpdateProjection()
+{
+#ifdef HAVE_LUA
+	if(freelookMode == 0) return;
+	float floatproj[16];
+	for(int i=0;i<16;i++)
+		floatproj[i] = mtxCurrent[MATRIXMODE_PROJECTION][i]/((float)(1<<12));
+	CallRegistered3dEvent(0,floatproj);
+#endif
+}
+
 static void gfx3d_glPolygonAttrib_cache()
 {
 	// Light enable/disable
@@ -984,6 +1017,8 @@ static void gfx3d_glPushMatrix()
 			if (index == 1) MMU_new.gxstat.se = 1;
 			index += 1;
 			index &= 1;
+
+			UpdateProjection();
 		}
 		else
 		{
@@ -1031,6 +1066,8 @@ static void gfx3d_glPopMatrix(u32 v)
 			index ^= 1;
 			if (index == 1) MMU_new.gxstat.se = 1;
 			MatrixCopy(mtxCurrent[mode], mtxStackProjection.matrix[0]);
+
+			UpdateProjection();
 		}
 		else
 		{
@@ -1070,6 +1107,7 @@ static void gfx3d_glStoreMatrix(u32 v)
 		if (mode == MATRIXMODE_PROJECTION)
 		{
 			MatrixCopy(mtxStackProjection.matrix[0], mtxCurrent[MATRIXMODE_PROJECTION]);
+			UpdateProjection();
 		}
 		else
 		{
@@ -1102,6 +1140,7 @@ static void gfx3d_glRestoreMatrix(u32 v)
 		if (mode == MATRIXMODE_PROJECTION)
 		{
 			MatrixCopy(mtxCurrent[MATRIXMODE_PROJECTION], mtxStackProjection.matrix[0]);
+			UpdateProjection();
 		}
 		else
 		{
@@ -1195,6 +1234,11 @@ static BOOL gfx3d_glMultMatrix4x4(s32 v)
 		GFX_DELAY_M2(30);
 	}
 
+	if(mode == MATRIXMODE_PROJECTION)
+	{
+		UpdateProjection();
+	}
+
 	//printf("mult4x4: matrix %d to: \n",mode); MatrixPrint(mtxCurrent[1]);
 
 	MatrixIdentity(mtxTemporal);
@@ -1224,6 +1268,11 @@ static BOOL gfx3d_glMultMatrix4x3(s32 v)
 	{
 		MatrixMultiply (mtxCurrent[MATRIXMODE_POSITION], mtxTemporal);
 		GFX_DELAY_M2(30);
+	}
+
+	if(mode == MATRIXMODE_PROJECTION)
+	{
+		UpdateProjection();
 	}
 
 	//printf("mult4x3: matrix %d to: \n",mode); MatrixPrint(mtxCurrent[1]);
@@ -1257,6 +1306,11 @@ static BOOL gfx3d_glMultMatrix3x3(s32 v)
 	{
 		MatrixMultiply(mtxCurrent[MATRIXMODE_POSITION], mtxTemporal);
 		GFX_DELAY_M2(30);
+	}
+
+	if(mode == MATRIXMODE_PROJECTION)
+	{
+		UpdateProjection();
 	}
 
 	//printf("mult3x3: matrix %d to: \n",mode); MatrixPrint(mtxCurrent[1]);
@@ -1907,7 +1961,7 @@ void gfx3d_glAlphaFunc(u32 v)
 
 u32 gfx3d_glGetPosRes(const size_t index)
 {
-	return (u32)(PTcoords[index] * 4096.0f);
+	return (u32)(s32)(PTcoords[index] * 4096.0f);
 }
 
 //#define _3D_LOG_EXEC
@@ -2220,47 +2274,27 @@ void gfx3d_glFlush(u32 v)
 	GFX_DELAY(1);
 }
 
-static inline bool gfx3d_ysort_compare_orig(int num1, int num2)
+static bool gfx3d_ysort_compare(int num1, int num2)
 {
 	const POLY &poly1 = polylist->list[num1];
 	const POLY &poly2 = polylist->list[num2];
-
-	if (poly1.maxy != poly2.maxy)
-		return poly1.maxy < poly2.maxy; 
-	if (poly1.miny != poly2.miny)
-		return poly1.miny < poly2.miny; 
-
-	return num1 < num2;
-}
-
-static inline bool gfx3d_ysort_compare_kalven(int num1, int num2)
-{
-	const POLY &poly1 = polylist->list[num1];
-	const POLY &poly2 = polylist->list[num2];
-
+	
 	//this may be verified by checking the game create menus in harvest moon island of happiness
 	//also the buttons in the knights in the nightmare frontend depend on this and the perspective division
-	if (poly1.maxy < poly2.maxy) return true;
-	if (poly1.maxy > poly2.maxy) return false;
-	if (poly1.miny < poly2.miny) return true;
-	if (poly1.miny > poly2.miny) return false;
+	if (poly1.maxy != poly2.maxy)
+		return (poly1.maxy < poly2.maxy);
+	if (poly1.miny != poly2.miny)
+		return (poly1.miny < poly2.miny);
+	
 	//notably, the main shop interface in harvest moon will not have a correct RTN button
 	//i think this is due to a math error rounding its position to one pixel too high and it popping behind
 	//the bar that it sits on.
 	//everything else in all the other menus that I could find looks right..
-
+	
 	//make sure we respect the game's ordering in cases of complete ties
 	//this makes it a stable sort.
 	//this must be a stable sort or else advance wars DOR will flicker in the main map mode
 	return (num1 < num2);
-}
-
-static bool gfx3d_ysort_compare(int num1, int num2)
-{
-	bool original = gfx3d_ysort_compare_orig(num1,num2);
-	bool kalven = gfx3d_ysort_compare_kalven(num1,num2);
-	assert(original == kalven);
-	return original;
 }
 
 static void gfx3d_doFlush()
@@ -2338,22 +2372,17 @@ static void gfx3d_doFlush()
 		if (poly.isTranslucent())
 			gfx3d.indexlist.list[ctr++] = i;
 	}
-	
-	//NOTE: the use of the stable_sort below must be here as a workaround for some compilers on osx and linux.
-	//we're hazy on the exact behaviour of the resulting bug, all thats known is the list gets mangled somehow.
-	//it should not in principle be relevant since the predicate results in no ties.
-	//perhaps the compiler is buggy. perhaps the predicate is wrong.
 
 	//now we have to sort the opaque polys by y-value.
-	//(test case: harvest moon island of happiness character cretor UI)
+	//(test case: harvest moon island of happiness character creator UI)
 	//should this be done after clipping??
-	std::stable_sort(gfx3d.indexlist.list, gfx3d.indexlist.list + polylist->opaqueCount, gfx3d_ysort_compare);
+	std::sort(gfx3d.indexlist.list, gfx3d.indexlist.list + polylist->opaqueCount, gfx3d_ysort_compare);
 	
 	if (!gfx3d.state.sortmode)
 	{
 		//if we are autosorting translucent polys, we need to do this also
 		//TODO - this is unverified behavior. need a test case
-		std::stable_sort(gfx3d.indexlist.list + polylist->opaqueCount, gfx3d.indexlist.list + polycount, gfx3d_ysort_compare);
+		std::sort(gfx3d.indexlist.list + polylist->opaqueCount, gfx3d.indexlist.list + polycount, gfx3d_ysort_compare);
 	}
 
 	//switch to the new lists
@@ -2382,6 +2411,10 @@ void gfx3d_VBlankSignal()
 		gfx3d_doFlush();
 		GFX_DELAY(392);
 		isSwapBuffers = FALSE;
+		
+		//let's consider this the beginning of the next 3d frame.
+		//in case the game isn't constantly restoring the projection matrix, we want to ping lua
+		UpdateProjection();
 	}
 }
 
@@ -2448,10 +2481,7 @@ void gfx3d_VBlankEndSignal(bool skipFrame)
 	}
 	else
 	{
-		memset(GPU->GetEngineMain()->Get3DFramebufferMain(), 0, GPU->GetCustomFramebufferWidth() * GPU->GetCustomFramebufferHeight() * sizeof(FragmentColor));
-		memset(GPU->GetEngineMain()->Get3DFramebuffer16(), 0, GPU->GetCustomFramebufferWidth() * GPU->GetCustomFramebufferHeight() * sizeof(u16));
-		CurrentRenderer->SetRenderNeedsFinish(false);
-		GPU->GetEventHandler()->DidRender3DEnd();
+		CurrentRenderer->RenderPowerOff();
 	}
 }
 
@@ -2678,24 +2708,54 @@ SFORMAT SF_GFX3D[]={
 	{ "GTVC", 4, 1, &tempVertInfo.count},
 	{ "GTVM", 4, 4, tempVertInfo.map},
 	{ "GTVF", 4, 1, &tempVertInfo.first},
-	{ "G3CX", 1, 4*GPU_FRAMEBUFFER_NATIVE_WIDTH*GPU_FRAMEBUFFER_NATIVE_HEIGHT, _gfx3d_colorMain},
+	{ "G3CX", 1, 4*GPU_FRAMEBUFFER_NATIVE_WIDTH*GPU_FRAMEBUFFER_NATIVE_HEIGHT, _gfx3d_savestateBuffer},
 	{ 0 }
 };
 
-void gfx3d_Update3DFramebuffers(FragmentColor *framebufferMain, u16 *framebuffer16)
-{
-	_gfx3d_colorMain = framebufferMain;
-	_gfx3d_color16 = framebuffer16;
-}
-
 //-------------savestate
-void gfx3d_savestate(EMUFILE &os)
+void gfx3d_PrepareSaveStateBufferWrite()
 {
 	if (CurrentRenderer->GetRenderNeedsFinish())
 	{
 		GPU->ForceRender3DFinishAndFlush(true);
 	}
 	
+	const size_t w = CurrentRenderer->GetFramebufferWidth();
+	const size_t h = CurrentRenderer->GetFramebufferHeight();
+	
+	if ( (w == GPU_FRAMEBUFFER_NATIVE_WIDTH) && (h == GPU_FRAMEBUFFER_NATIVE_HEIGHT) ) // Framebuffer is at the native size
+	{
+		if (CurrentRenderer->GetColorFormat() == NDSColorFormat_BGR666_Rev)
+		{
+			ColorspaceConvertBuffer6665To8888<false, false>((u32 *)CurrentRenderer->GetFramebuffer(), (u32 *)_gfx3d_savestateBuffer, GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT);
+		}
+		else
+		{
+			ColorspaceCopyBuffer32<false, false>((u32 *)CurrentRenderer->GetFramebuffer(), (u32 *)_gfx3d_savestateBuffer, GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT);
+		}
+	}
+	else // Framebuffer is at a custom size
+	{
+		const FragmentColor *__restrict src = CurrentRenderer->GetFramebuffer();
+		FragmentColor *__restrict dst = _gfx3d_savestateBuffer;
+		
+		for (size_t l = 0; l < GPU_FRAMEBUFFER_NATIVE_HEIGHT; l++)
+		{
+			const GPUEngineLineInfo &lineInfo = GPU->GetLineInfoAtIndex(l);
+			CopyLineReduceHinted<0xFFFF, false, true, 4>(lineInfo, src, dst);
+			src += lineInfo.pixelCount;
+			dst += GPU_FRAMEBUFFER_NATIVE_WIDTH;
+		}
+		
+		if (CurrentRenderer->GetColorFormat() == NDSColorFormat_BGR666_Rev)
+		{
+			ColorspaceConvertBuffer6665To8888<false, false>((u32 *)_gfx3d_savestateBuffer, (u32 *)_gfx3d_savestateBuffer, GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT);
+		}
+	}
+}
+
+void gfx3d_savestate(EMUFILE &os)
+{
 	//version
 	os.write_32LE(4);
 
@@ -2864,6 +2924,59 @@ bool gfx3d_loadstate(EMUFILE &is, int size)
 	}
 
 	return true;
+}
+
+void gfx3d_FinishLoadStateBufferRead()
+{
+	const Render3DDeviceInfo &deviceInfo = CurrentRenderer->GetDeviceInfo();
+	
+	switch (deviceInfo.renderID)
+	{
+		case RENDERID_NULL:
+			memset(CurrentRenderer->GetFramebuffer(), 0, GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT * sizeof(FragmentColor));
+			break;
+			
+		case RENDERID_SOFTRASTERIZER:
+		{
+			const size_t w = CurrentRenderer->GetFramebufferWidth();
+			const size_t h = CurrentRenderer->GetFramebufferHeight();
+			
+			if ( (w == GPU_FRAMEBUFFER_NATIVE_WIDTH) && (h == GPU_FRAMEBUFFER_NATIVE_HEIGHT) ) // Framebuffer is at the native size
+			{
+				if (CurrentRenderer->GetColorFormat() == NDSColorFormat_BGR666_Rev)
+				{
+					ColorspaceConvertBuffer8888To6665<false, false>((u32 *)_gfx3d_savestateBuffer, (u32 *)CurrentRenderer->GetFramebuffer(), GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT);
+				}
+				else
+				{
+					ColorspaceCopyBuffer32<false, false>((u32 *)_gfx3d_savestateBuffer, (u32 *)CurrentRenderer->GetFramebuffer(), GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT);
+				}
+			}
+			else // Framebuffer is at a custom size
+			{
+				if (CurrentRenderer->GetColorFormat() == NDSColorFormat_BGR666_Rev)
+				{
+					ColorspaceConvertBuffer8888To6665<false, false>((u32 *)_gfx3d_savestateBuffer, (u32 *)_gfx3d_savestateBuffer, GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT);
+				}
+				
+				const FragmentColor *__restrict src = _gfx3d_savestateBuffer;
+				FragmentColor *__restrict dst = CurrentRenderer->GetFramebuffer();
+				
+				for (size_t l = 0; l < GPU_FRAMEBUFFER_NATIVE_HEIGHT; l++)
+				{
+					const GPUEngineLineInfo &lineInfo = GPU->GetLineInfoAtIndex(l);
+					CopyLineExpandHinted<0xFFFF, true, false, true, 4>(lineInfo, src, dst);
+					src += GPU_FRAMEBUFFER_NATIVE_WIDTH;
+					dst += lineInfo.pixelCount;
+				}
+			}
+			break;
+		}
+			
+		default:
+			// Do nothing. Loading the 3D framebuffer is unsupported on this 3D renderer.
+			break;
+	}
 }
 
 void gfx3d_parseCurrentDISP3DCNT()

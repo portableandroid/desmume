@@ -87,7 +87,7 @@ static NDSError _lastNDSError;
 
 GameInfo gameInfo;
 NDSSystem nds;
-CFIRMWARE *firmware = NULL;
+CFIRMWARE *extFirmwareObj = NULL;
 
 using std::min;
 using std::max;
@@ -100,8 +100,6 @@ int lastLag;
 int TotalLagFrames;
 
 TSCalInfo TSCal;
-
-WifiEmulationLevel wifiEmulationLevel = WifiEmulationLevel_Off;
 
 namespace DLDI
 {
@@ -128,7 +126,7 @@ int NDS_GetCPUCoreCount()
 
 void NDS_SetupDefaultFirmware()
 {
-	NDS_FillDefaultFirmwareConfigData(&CommonSettings.fw_config);
+	NDS_GetDefaultFirmwareConfig(CommonSettings.fwConfig);
 }
 
 void NDS_RunAdvansceneAutoImport()
@@ -180,8 +178,9 @@ int NDS_Init()
 	
 	if (SPU_Init(SNDCORE_DUMMY, 740) != 0)
 		return -1;
-
-	WIFI_Init() ;
+	
+	delete wifiHandler;
+	wifiHandler = new WifiHandler;
 
 	cheats = new CHEATS();
 	cheatSearch = new CHEATSEARCH();
@@ -198,7 +197,9 @@ void NDS_DeInit(void)
 	GPU = NULL;
 	
 	MMU_DeInit();
-	WIFI_DeInit();
+	
+	delete wifiHandler;
+	wifiHandler = NULL;
 	
 	delete cheats;
 	cheats = NULL;
@@ -571,6 +572,9 @@ bool GameInfo::loadROM(std::string fname, u32 type)
 
 void GameInfo::closeROM()
 {
+	if (wifiHandler != NULL)
+		wifiHandler->CommStop();
+	
 	if (GPU != NULL)
 		GPU->ForceFrameStop();
 	
@@ -779,6 +783,7 @@ int NDS_LoadROM(const char *filename, const char *physicalName, const char *logi
 		cheats->init(buf);
 	}
 
+	//UnloadMovieEmulationSettings(); called in NDS_Reset()
 	NDS_Reset();
 
 	return ret;
@@ -788,6 +793,7 @@ void NDS_FreeROM(void)
 {
 	FCEUI_StopMovie();
 	gameInfo.closeROM();
+	UnloadMovieEmulationSettings();
 }
 
 void NDS_Sleep() { nds.sleeping = TRUE; }
@@ -1227,7 +1233,7 @@ struct Sequencer
 		if (!divider.load(is)) return false;
 		if (!sqrtunit.load(is)) return false;
 		if (!gxfifo.load(is)) return false;
-		if (!readslot1.load(is)) return false;
+		if (version >= 4) if (!readslot1.load(is)) return false;
 		if (version >= 1) if(!wifi.load(is)) return false;
 #define LOAD(I,X,Y) if(!I##_##X##_##Y .load(is)) return false;
 		LOAD(timer,0,0); LOAD(timer,0,1); LOAD(timer,0,2); LOAD(timer,0,3); 
@@ -1335,19 +1341,16 @@ void Sequencer::init()
 	dma_1_1.controller = &MMU_new.dma[1][1];
 	dma_1_2.controller = &MMU_new.dma[1][2];
 	dma_1_3.controller = &MMU_new.dma[1][3];
-
-
-	#ifdef EXPERIMENTAL_WIFI_COMM
-	if(wifiEmulationLevel > WifiEmulationLevel_Off) 
+	
+	if (wifiHandler->GetCurrentEmulationLevel() != WifiEmulationLevel_Off)
 	{
 		wifi.enabled = true;
 		wifi.timestamp = kWifiCycles;
 	}
 	else
+	{
 		wifi.enabled = false;
-	#else
-	wifi.enabled = false;
-	#endif
+	}
 }
 
 static void execHardware_hblank()
@@ -1672,10 +1675,7 @@ u64 Sequencer::findNext()
 	if(sqrtunit.isEnabled()) next = _fast_min(next,sqrtunit.next());
 	if(gxfifo.enabled) next = _fast_min(next,gxfifo.next());
 	if(readslot1.isEnabled()) next = _fast_min(next,readslot1.next());
-
-#ifdef EXPERIMENTAL_WIFI_COMM
-	if (wifiEmulationLevel > WifiEmulationLevel_Off) next = _fast_min(next,wifi.next());
-#endif
+	if (wifi.enabled) next = _fast_min(next,wifi.next());
 
 #define test(X,Y) if(dma_##X##_##Y .isEnabled()) next = _fast_min(next,dma_##X##_##Y .next());
 	test(0,0); test(0,1); test(0,2); test(0,3);
@@ -1731,16 +1731,14 @@ void Sequencer::execHardware()
 		}
 	}
 
-#ifdef EXPERIMENTAL_WIFI_COMM
-	if(wifiEmulationLevel > WifiEmulationLevel_Off)
+	if (wifiHandler->GetCurrentEmulationLevel() != WifiEmulationLevel_Off)
 	{
-		if(wifi.isTriggered())
+		if (wifi.isTriggered())
 		{
-			WIFI_usTrigger();
+			wifiHandler->CommTrigger();
 			wifi.timestamp += kWifiCycles;
 		}
 	}
-#endif
 	
 	if(divider.isTriggered()) divider.exec();
 	if(sqrtunit.isTriggered()) sqrtunit.exec();
@@ -1766,7 +1764,7 @@ static bool loadUserInput(EMUFILE &is, int version);
 void nds_savestate(EMUFILE &os)
 {
 	//version
-	os.write_32LE(3);
+	os.write_32LE(4);
 
 	sequencer.save(os);
 
@@ -1786,7 +1784,13 @@ bool nds_loadstate(EMUFILE &is, int size)
 	u32 version;
 	if (is.read_32LE(version) != 1) return false;
 
-	if (version > 3) return false;
+	if (version > 4) return false;
+	// hacky fix; commit 281268e added to the saved info but didn't update version
+	if (version == 3)
+	{
+		if (size == 497)
+			version = 4;
+	}
 
 	bool temp = true;
 	temp &= sequencer.load(is, version);
@@ -2165,7 +2169,7 @@ static void PrepareBiosARM7()
 	NDS_ARM7.BIOS_loaded = false;
 	memset(MMU.ARM7_BIOS, 0, sizeof(MMU.ARM7_BIOS));
 
-	if(CommonSettings.UseExtBIOS == true)
+	if(CommonSettings.UseExtBIOS)
 	{
 		//read arm7 bios from inputfile and flag it if it succeeds
 		FILE *arm7inf = (FILE*)fopen(CommonSettings.ARM7BIOS,"rb");
@@ -2223,7 +2227,7 @@ static void PrepareBiosARM9()
 	memset(MMU.ARM9_BIOS, 0, sizeof(MMU.ARM9_BIOS));
 	NDS_ARM9.BIOS_loaded = false;
 
-	if(CommonSettings.UseExtBIOS == true)
+	if(CommonSettings.UseExtBIOS)
 	{
 		//read arm9 bios from inputfile and flag it if it succeeds
 		FILE* arm9inf = (FILE*)fopen(CommonSettings.ARM9BIOS,"rb");
@@ -2385,10 +2389,7 @@ bool NDS_LegitBoot()
 		//CRAZYMAX: is it safe to accept anything smaller than 12?
 		CommonSettings.jit_max_block_size = std::min(CommonSettings.jit_max_block_size,12U);
 	#endif
-
-	//partially clobber the loaded firmware with the user settings from DFC
-	firmware->loadSettings();
-
+	
 	//since firmware only boots encrypted roms, we have to make sure it's encrypted first
 	//this has not been validated on big endian systems. it almost positively doesn't work.
 	if (gameInfo.header.CRC16 != 0)
@@ -2426,19 +2427,6 @@ bool NDS_FakeBoot()
 
 	//bios (or firmware) sets this default, which is generally not important for retail games but some homebrews are depending on
 	_MMU_write08<ARMCPU_ARM9>(REG_WRAMCNT,3);
-
-	//EDIT - whats this firmware and how is it relating to the dummy firmware below
-	//how do these even get used? what is the purpose of unpack and why is it not used by the firmware boot process?
-	if (CommonSettings.UseExtFirmware && firmware->loaded())
-	{
-		firmware->unpack();
-		firmware->loadSettings();
-	}
-
-	// Create the dummy firmware
-	//EDIT - whats dummy firmware and how is relating to the above?
-	//it seems to be emplacing basic firmware data into MMU.fw.data
-	NDS_CreateDummyFirmware(&CommonSettings.fw_config);
 	
 	//firmware loads the game card arm9 and arm7 programs as specified in rom header
 	{
@@ -2477,7 +2465,7 @@ bool NDS_FakeBoot()
 	//TBD - this code is really clunky
 	//it seems to be copying the MMU.fw.data data into RAM in the user memory stash locations
 	u8 temp_buffer[NDS_FW_USER_SETTINGS_MEM_BYTE_COUNT];
-	if ( copy_firmware_user_data( temp_buffer, MMU.fw.data)) {
+	if ( copy_firmware_user_data( temp_buffer, MMU.fw.data._raw)) {
 		for ( int fw_index = 0; fw_index < NDS_FW_USER_SETTINGS_MEM_BYTE_COUNT; fw_index++)
 			_MMU_write08<ARMCPU_ARM9>(0x027FFC80 + fw_index, temp_buffer[fw_index]);
 	}
@@ -2573,6 +2561,8 @@ bool NDS_FakeBoot()
 bool _HACK_DONT_STOPMOVIE = false;
 void NDS_Reset()
 {
+	UnloadMovieEmulationSettings();
+
 	//reload last paths if needed
 	if(!gameInfo.reader)
 	{
@@ -2648,33 +2638,62 @@ void NDS_Reset()
 	PrepareBiosARM7();
 	PrepareBiosARM9();
 
-	if (firmware)
+	if (extFirmwareObj)
 	{
-		delete firmware;
-		firmware = NULL;
+		delete extFirmwareObj;
+		extFirmwareObj = NULL;
 	}
-
-	firmware = new CFIRMWARE();
-	firmware->load();
-
+	
+	bool didLoadExtFirmware = false;
+	extFirmwareObj = new CFIRMWARE();
+	
+	if (CommonSettings.UseExtFirmware && NDS_ARM7.BIOS_loaded && NDS_ARM9.BIOS_loaded)
+	{
+		didLoadExtFirmware = extFirmwareObj->load(CommonSettings.ExtFirmwarePath);
+	}
+	
+	if (didLoadExtFirmware)
+	{
+		// what is the purpose of unpack?
+		extFirmwareObj->unpack();
+		
+		std::string extFWUserSettingsString = CFIRMWARE::GetUserSettingsFilePath(CommonSettings.ExtFirmwarePath);
+		strncpy(CommonSettings.ExtFirmwareUserSettingsPath, extFWUserSettingsString.c_str(), MAX_PATH);
+		
+		//partially clobber the loaded firmware with the user settings from DFC
+		if (CommonSettings.UseExtFirmwareSettings)
+		{
+			extFirmwareObj->loadSettings(CommonSettings.ExtFirmwareUserSettingsPath);
+		}
+	}
+	else
+	{
+		NDS_InitFirmwareWithConfig(CommonSettings.fwConfig);
+	}
+	
 	//we will allow a proper firmware boot, if:
 	//1. we have the ARM7 and ARM9 bioses (its doubtful that our HLE bios implement the necessary functions)
 	//2. firmware is available
 	//3. user has requested booting from firmware
-	bool canBootFromFirmware = (NDS_ARM7.BIOS_loaded && NDS_ARM9.BIOS_loaded && CommonSettings.BootFromFirmware && firmware->loaded());
+	bool canBootFromFirmware = (CommonSettings.BootFromFirmware && didLoadExtFirmware);
 	bool bootResult = false;
-	if(canBootFromFirmware)
+	
+	if (canBootFromFirmware)
+	{
 		bootResult = NDS_LegitBoot();
+	}
 	else
+	{
 		bootResult = NDS_FakeBoot();
-
+	}
+	
 	// Init calibration info
-	memcpy(&TSCal, firmware->getTouchCalibrate(), sizeof(TSCalInfo));
+	memcpy(&TSCal, extFirmwareObj->getTouchCalibrate(), sizeof(TSCalInfo));
 
 	GPU->Reset();
 
-	WIFI_Reset();
-	memcpy(FW_Mac, (MMU.fw.data + 0x36), 6);
+	wifiHandler->Reset();
+	wifiHandler->CommStart();
 
 	SPU_DeInit();
 	SPU_ReInit(!canBootFromFirmware && bootResult);
@@ -3090,6 +3109,7 @@ void emu_halt(EmuHaltReasonCode reasonCode, NDSErrorTag errorTag)
 	
 	NDS_CurrentCPUInfoToNDSError(_lastNDSError);
 	
+	wifiHandler->CommStop();
 	GPU->ForceFrameStop();
 	execute = false;
 	

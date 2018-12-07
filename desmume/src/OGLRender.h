@@ -1,7 +1,7 @@
 /*
 	Copyright (C) 2006 yopyop
 	Copyright (C) 2006-2007 shash
-	Copyright (C) 2008-2017 DeSmuME team
+	Copyright (C) 2008-2018 DeSmuME team
 
 	This file is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -286,21 +286,6 @@ EXTERNOGLEXT(PFNGLTEXBUFFERPROC, glTexBuffer) // Core in v3.1
 
 #define OGLRENDER_VERT_INDEX_BUFFER_COUNT	(POLYLIST_SIZE * 6)
 
-enum OGLMaxMultisamples
-{
-	OGLMaxMultisamples_Tier1			= 32,
-	OGLMaxMultisamples_Tier2			= 16,
-	OGLMaxMultisamples_Tier3			= 8,
-	OGLMaxMultisamples_Tier4			= 4,
-};
-
-enum OGLMaxMultisamplesScaleLimit
-{
-	OGLMaxMultisamplesScaleLimit_Tier1	= 1,
-	OGLMaxMultisamplesScaleLimit_Tier2	= 4,
-	OGLMaxMultisamplesScaleLimit_Tier3	= 8
-};
-
 enum OGLVertexAttributeID
 {
 	OGLVertexAttributeID_Position	= 0,
@@ -316,7 +301,6 @@ enum OGLTextureUnitID
 	OGLTextureUnitID_GColor,
 	OGLTextureUnitID_DepthStencil,
 	OGLTextureUnitID_GPolyID,
-	OGLTextureUnitID_ZeroAlphaPixelMask,
 	OGLTextureUnitID_FogAttr,
 	OGLTextureUnitID_PolyStates
 };
@@ -451,9 +435,7 @@ struct OGLRenderRef
 	GLuint texGColorID;
 	GLuint texGFogAttrID;
 	GLuint texGPolyID;
-	GLuint texZeroAlphaPixelMaskID;
 	GLuint texGDepthStencilID;
-	GLuint texGDepthStencilAlphaID;
 	GLuint texFinalColorID;
 	GLuint texMSGColorID;
 	
@@ -461,14 +443,11 @@ struct OGLRenderRef
 	GLuint rboMSGPolyID;
 	GLuint rboMSGFogAttrID;
 	GLuint rboMSGDepthStencilID;
-	GLuint rboMSGDepthStencilAlphaID;
 	
 	GLuint fboClearImageID;
 	GLuint fboRenderID;
-	GLuint fboRenderAlphaID;
 	GLuint fboPostprocessID;
 	GLuint fboMSIntermediateRenderID;
-	GLuint fboMSIntermediateRenderAlphaID;
 	GLuint selectedRenderingFBO;
 	
 	// Shader states
@@ -539,9 +518,10 @@ struct OGLRenderRef
 	// Client-side Buffers
 	GLfloat *color4fBuffer;
 	GLushort *vertIndexBuffer;
-	CACHE_ALIGN GLuint workingCIDepthStencilBuffer[GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
-	CACHE_ALIGN GLuint workingCIFogAttributesBuffer[GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
-	CACHE_ALIGN GLuint workingCIPolyIDBuffer[GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
+	CACHE_ALIGN GLushort workingCIColorBuffer[GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
+	CACHE_ALIGN GLuint workingCIDepthStencilBuffer[2][GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
+	CACHE_ALIGN GLuint workingCIFogAttributesBuffer[2][GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
+	CACHE_ALIGN GLuint workingCIPolyIDBuffer[2][GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
 	
 	// Vertex Attributes Pointers
 	GLvoid *vtxPtrPosition;
@@ -658,6 +638,11 @@ protected:
 	bool willFlipAndConvertFramebufferOnGPU;
 	bool willUsePerSampleZeroDstPass;
 	
+	bool _emulateShadowPolygon;
+	bool _emulateSpecialZeroAlphaBlending;
+	bool _emulateDepthEqualsTestTolerance;
+	bool _emulateDepthLEqualPolygonFacing;
+	
 	FragmentColor *_mappedFramebuffer;
 	FragmentColor *_workingTextureUnpackBuffer;
 	bool _pixelReadNeedsFinish;
@@ -666,12 +651,28 @@ protected:
 	OGLTextureUnitID _lastTextureDrawTarget;
 	
 	bool _enableMultisampledRendering;
+	int _selectedMultisampleSize;
+	bool _isPolyFrontFacing[POLYLIST_SIZE];
+	size_t _clearImageIndex;
 	
 	Render3DError FlushFramebuffer(const FragmentColor *__restrict srcFramebuffer, FragmentColor *__restrict dstFramebufferMain, u16 *__restrict dstFramebuffer16);
 	OpenGLTexture* GetLoadedTextureFromPolygon(const POLY &thePoly, bool enableTexturing);
 	template<OGLPolyDrawMode DRAWMODE> size_t DrawPolygonsForIndexRange(const POLYLIST *polyList, const INDEXLIST *indexList, size_t firstIndex, size_t lastIndex, size_t &indexOffset, POLYGON_ATTR &lastPolyAttr);
-	template<OGLPolyDrawMode DRAWMODE> Render3DError DrawAlphaTexturePolygon(const GLenum polyPrimitive, const GLsizei vertIndexCount, const GLushort *indexBufferPtr, const bool performDepthEqualTest, const bool enableAlphaDepthWrite, const bool canHaveOpaqueFragments, const u8 opaquePolyID);
-	template<OGLPolyDrawMode DRAWMODE> Render3DError DrawOtherPolygon(const GLenum polyPrimitive, const GLsizei vertIndexCount, const GLushort *indexBufferPtr, const bool performDepthEqualTest, const bool enableAlphaDepthWrite, const u8 opaquePolyID);
+	template<OGLPolyDrawMode DRAWMODE> Render3DError DrawAlphaTexturePolygon(const GLenum polyPrimitive,
+																			 const GLsizei vertIndexCount,
+																			 const GLushort *indexBufferPtr,
+																			 const bool performDepthEqualTest,
+																			 const bool enableAlphaDepthWrite,
+																			 const bool canHaveOpaqueFragments,
+																			 const u8 opaquePolyID,
+																			 const bool isPolyFrontFacing);
+	template<OGLPolyDrawMode DRAWMODE> Render3DError DrawOtherPolygon(const GLenum polyPrimitive,
+																	  const GLsizei vertIndexCount,
+																	  const GLushort *indexBufferPtr,
+																	  const bool performDepthEqualTest,
+																	  const bool enableAlphaDepthWrite,
+																	  const u8 opaquePolyID,
+																	  const bool isPolyFrontFacing);
 	
 	// OpenGL-specific methods
 	virtual Render3DError CreateVBOs() = 0;
@@ -682,6 +683,7 @@ protected:
 	virtual void DestroyFBOs() = 0;
 	virtual Render3DError CreateMultisampledFBO(GLsizei numSamples) = 0;
 	virtual void DestroyMultisampledFBO() = 0;
+	virtual void ResizeMultisampledFBOs(GLsizei numSamples) = 0;
 	virtual Render3DError InitGeometryProgram(const char *geometryVtxShaderCString, const char *geometryFragShaderCString,
 											  const char *geometryAlphaVtxShaderCString, const char *geometryAlphaFragShaderCString,
 											  const char *geometryMSAlphaVtxShaderCString, const char *geometryMSAlphaFragShaderCString) = 0;
@@ -753,6 +755,7 @@ protected:
 	virtual void DestroyFBOs();
 	virtual Render3DError CreateMultisampledFBO(GLsizei numSamples);
 	virtual void DestroyMultisampledFBO();
+	virtual void ResizeMultisampledFBOs(GLsizei numSamples);
 	virtual Render3DError CreateVAOs();
 	virtual void DestroyVAOs();
 	virtual Render3DError InitFinalRenderStates(const std::set<std::string> *oglExtensionSet);
@@ -815,6 +818,7 @@ public:
 	virtual Render3DError InitExtensions();
 	virtual Render3DError UpdateToonTable(const u16 *toonTableBuffer);
 	virtual Render3DError Reset();
+	virtual Render3DError RenderPowerOff();
 	virtual Render3DError RenderFinish();
 	virtual Render3DError RenderFlush(bool willFlushBuffer32, bool willFlushBuffer16);
 	virtual Render3DError SetFramebufferSize(size_t w, size_t h);

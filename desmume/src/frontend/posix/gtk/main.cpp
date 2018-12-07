@@ -1,6 +1,6 @@
  /*
 	Copyright (C) 2007 Pascal Giard (evilynux)
-	Copyright (C) 2006-2017 DeSmuME team
+	Copyright (C) 2006-2018 DeSmuME team
  
 	This file is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -1064,7 +1064,7 @@ static void RecordMovieDialog()
     switch(gtk_dialog_run(GTK_DIALOG(pFileSelection))) {
     case GTK_RESPONSE_OK:
         sPath = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(pFileSelection));
-        FCEUI_SaveMovie(sPath,L"",0,"", FCEUI_MovieGetRTCDefault());
+        FCEUI_SaveMovie(sPath,L"",START_BLANK,"", FCEUI_MovieGetRTCDefault());
         g_free(sPath);
         break;
     default:
@@ -2238,7 +2238,7 @@ static void GraphicsSettingsDialog() {
 #ifdef HAVE_OPENGL
 	// OpenGL Multisample
 	wMultisample = gtk_check_button_new_with_label("Multisample Antialiasing (OpenGL)");
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wMultisample), CommonSettings.GFX3D_Renderer_Multisample);
+	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wMultisample), (CommonSettings.GFX3D_Renderer_MultisampleSize > 0) ? TRUE : FALSE);
 	gtk_table_attach(GTK_TABLE(wTable), wMultisample, 1, 2, 2, 3,
 			static_cast<GtkAttachOptions>(GTK_EXPAND | GTK_FILL),
 			static_cast<GtkAttachOptions>(GTK_EXPAND | GTK_FILL), 10, 0);
@@ -2309,7 +2309,8 @@ static void GraphicsSettingsDialog() {
 		CommonSettings.GFX3D_Renderer_TextureScalingFactor = config.textureUpscale = scale;
 		CommonSettings.GFX3D_HighResolutionInterpolateColor = config.highColorInterpolation = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wHCInterpolate));
 #ifdef HAVE_OPENGL
-		CommonSettings.GFX3D_Renderer_Multisample = config.multisampling = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wMultisample));
+		config.multisampling = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wMultisample));
+		CommonSettings.GFX3D_Renderer_MultisampleSize = (config.multisampling) ? 4 : 0;
 #endif
     }
     // End: OK Response Block
@@ -2357,7 +2358,8 @@ static void ToggleLayerVisibility(GtkToggleAction* action, gpointer data)
 static void Printscreen()
 {
     GdkPixbuf *screenshot;
-    gchar *filename, *filen;
+    const gchar *dir;
+    gchar *filename = NULL, *filen = NULL;
     GError *error = NULL;
     u8 rgb[256 * 384 * 4];
     static int seq = 0;
@@ -2386,15 +2388,27 @@ static void Printscreen()
                           NULL,
                           NULL);
 
-    filen = g_strdup_printf("desmume-screenshot-%d.png", seq);
-    filename = g_build_filename(g_get_user_special_dir(G_USER_DIRECTORY_PICTURES), filen, NULL);
+    dir = g_get_user_special_dir(G_USER_DIRECTORY_PICTURES);
+    if (dir == NULL) {
+        dir = g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP);
+    }
+    if (dir == NULL) {
+        dir = g_get_home_dir();
+    }
+
+    do {
+        g_free(filen);
+        g_free(filename);
+        filen = g_strdup_printf("desmume-screenshot-%d.png", seq++);
+        filename = g_build_filename(dir, filen, NULL);
+    }
+    while (g_file_test(filename, G_FILE_TEST_EXISTS));
 
     gdk_pixbuf_save(screenshot, filename, "png", &error, NULL);
     if (error) {
         g_error_free (error);
         g_printerr("Failed to save %s", filename);
-    } else {
-        seq++;
+        seq--;
     }
 
     //free(rgb);
@@ -2444,7 +2458,7 @@ static void SelectFirmwareFile()
     case GTK_RESPONSE_OK:
         sPath = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(pFileSelection));
         CommonSettings.UseExtFirmware = true;
-        strncpy(CommonSettings.Firmware, (const char*)sPath, g_utf8_strlen(sPath, -1));
+        strncpy(CommonSettings.ExtFirmwarePath, (const char*)sPath, g_utf8_strlen(sPath, -1));
         g_free(sPath);
         break;
     default:
@@ -3005,10 +3019,10 @@ common_gtk_main( class configured_features *my_config)
     GtkWidget *pToolBar;
 
     /* the firmware settings */
-    struct NDS_fw_config_data fw_config;
+    FirmwareConfig fw_config;
 
     /* default the firmware settings, they may get changed later */
-    NDS_FillDefaultFirmwareConfigData( &fw_config);
+    NDS_GetDefaultFirmwareConfig(fw_config);
 
     /* use any language set on the command line */
     if ( my_config->firmware_language != -1) {
@@ -3130,7 +3144,7 @@ common_gtk_main( class configured_features *my_config)
 #endif
 
     /* Create the dummy firmware */
-    NDS_CreateDummyFirmware( &fw_config);
+    NDS_InitFirmwareWithConfig(fw_config);
 
     /* Initialize joysticks */
     if(!init_joy()) return 1;
@@ -3411,7 +3425,7 @@ common_gtk_main( class configured_features *my_config)
 	}
 
     CommonSettings.GFX3D_HighResolutionInterpolateColor = config.highColorInterpolation;
-    CommonSettings.GFX3D_Renderer_Multisample = config.multisampling;
+	CommonSettings.GFX3D_Renderer_MultisampleSize = (config.multisampling) ? 4 : 0;
     CommonSettings.GFX3D_Renderer_TextureDeposterize = config.textureDeposterize;
     CommonSettings.GFX3D_Renderer_TextureScalingFactor = (config.textureUpscale == 1 ||
     														config.textureUpscale == 2 ||
@@ -3511,8 +3525,9 @@ int main (int argc, char *argv[])
       fprintf(stderr, "Warning: X11 not thread-safe\n");
     }
 
-  if (!g_thread_supported())
+#if !g_thread_supported()
     g_thread_init( NULL);
+#endif
 
   gtk_init(&argc, &argv);
 

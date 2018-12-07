@@ -40,10 +40,13 @@
 #define DS_FRAMES_PER_SECOND						59.8261		// Number of DS frames per second.
 #define DS_SECONDS_PER_FRAME						(1.0 / DS_FRAMES_PER_SECOND) // The length of time in seconds that, ideally, a frame should be processed within.
 
-#define FRAME_SKIP_AGGRESSIVENESS					9.0			// Must be a value between 0.0 (inclusive) and positive infinity.
+#define FRAME_SKIP_AGGRESSIVENESS					1.0			// Must be a value between 0.0 (inclusive) and positive infinity.
 																// This value acts as a scalar multiple of the frame skip.
-#define FRAME_SKIP_BIAS								0.1			// May be any real number. This value acts as a vector addition to the frame skip.
+#define FRAME_SKIP_BIAS								0.9			// May be any real number. This value acts as a vector addition to the frame skip.
 #define MAX_FRAME_SKIP								(DS_FRAMES_PER_SECOND / 2.98)
+
+#define EXECUTION_WAIT_BIAS_MIN						0.70
+#define EXECUTION_WAIT_BIAS_MAX						1.10
 
 class ClientAVCaptureObject;
 
@@ -78,6 +81,8 @@ struct ClientExecutionControlSettings
 	std::string filePathFirmware;
 	std::string filePathSlot1R4;
 	
+	FirmwareConfig fwConfig;
+	
 	std::string cpuEmulationEngineName;
 	std::string slot1DeviceName;
 	
@@ -91,6 +96,9 @@ struct ClientExecutionControlSettings
 	bool enableFirmwareBoot;
 	bool enableDebugConsole;
 	bool enableEnsataEmulation;
+	
+	int wifiEmulationMode;
+	int wifiBridgeDeviceIndex;
 	
 	bool enableCheats;
 	
@@ -211,6 +219,9 @@ protected:
 	
 	double _frameTime;
 	uint8_t _framesToSkip;
+	double _lastSetFrameSkip;
+	size_t _unskipStep;
+	size_t _dynamicBiasStep;
 	ExecutionBehavior _prevExecBehavior;
 	
 	bool _isGdbStubStarted;
@@ -283,6 +294,10 @@ public:
 	bool GetEnableBIOSPatchDelayLoop();
 	void SetEnableBIOSPatchDelayLoop(bool enable);
 	
+	FirmwareConfig GetFirmwareConfig();
+	FirmwareConfig GetFirmwareConfigApplied();
+	void SetFirmwareConfig(const FirmwareConfig &inConfig);
+	
 	bool GetEnableExternalFirmware();
 	void SetEnableExternalFirmware(bool enable);
 	
@@ -295,13 +310,23 @@ public:
 	bool GetEnableEnsataEmulation();
 	void SetEnableEnsataEmulation(bool enable);
 	
+	int GetWifiEmulationMode();
+	void SetWifiEmulationMode(int wifiEmulationMode);
+	
+	int GetWifiBridgeDeviceIndex();
+	void SetWifiBridgeDeviceIndex(int wifiBridgeDeviceIndex);
+	
+	uint8_t* GetCurrentSessionMACAddress();
+	
 	bool GetEnableCheats();
 	void SetEnableCheats(bool enable);
 	
 	bool GetEnableSpeedLimiter();
+	bool GetEnableSpeedLimiterApplied();
 	void SetEnableSpeedLimiter(bool enable);
 	
 	double GetExecutionSpeed();
+	double GetExecutionSpeedApplied();
 	void SetExecutionSpeed(double speedScalar);
 	
 	bool GetEnableFrameSkip();

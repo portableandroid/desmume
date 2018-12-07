@@ -162,6 +162,7 @@ protected:
 	bool _renderNeedsFinish;
 	bool _renderNeedsFlushMain;
 	bool _renderNeedsFlush16;
+	bool _isPoweredOn;
 	
 	bool _enableEdgeMark;
 	bool _enableFog;
@@ -184,6 +185,10 @@ protected:
 	CACHE_ALIGN u32 clearImageDepthBuffer[GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
 	CACHE_ALIGN u8 clearImageFogBuffer[GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
 	CACHE_ALIGN u8 clearImagePolyIDBuffer[GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
+	
+	template<bool ISCOLORBLANK, bool ISDEPTHBLANK> void _ClearImageScrolledLoop(const u8 xScroll, const u8 yScroll, const u16 *__restrict inColor16, const u16 *__restrict inDepth16, const u8 inPolyID,
+																				u16 *__restrict outColor16, u32 *__restrict outDepth24, u8 *__restrict outFog, u8 *__restrict outPolyID);
+	
 	
 	virtual Render3DError BeginRender(const GFX3D &engine);
 	virtual Render3DError RenderGeometry(const GFX3D_State &renderState, const POLYLIST *polyList, const INDEXLIST *indexList);
@@ -218,6 +223,8 @@ public:
 	virtual Render3DError ApplyRenderingSettings(const GFX3D_State &renderState);
 	
 	virtual Render3DError Reset();						// Called when the emulator resets.
+	
+	virtual Render3DError RenderPowerOff();				// Called when the renderer needs to handle a power-off condition by clearing its framebuffers.
 	
 	virtual Render3DError Render(const GFX3D &engine);	// Called when the renderer should do its job and render the current display lists.
 	

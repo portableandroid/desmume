@@ -429,7 +429,7 @@ bool CommandLine::parse(int argc,char **argv)
 	if(_bios_arm9) { CommonSettings.UseExtBIOS = true; strcpy(CommonSettings.ARM9BIOS,_bios_arm9); }
 	if(_bios_arm7) { CommonSettings.UseExtBIOS = true; strcpy(CommonSettings.ARM7BIOS,_bios_arm7); }
 	#ifndef HOST_WINDOWS 
-		if(_fw_path) { CommonSettings.UseExtFirmware = true; CommonSettings.UseExtFirmwareSettings = true; strcpy(CommonSettings.Firmware,_fw_path); } 
+		if(_fw_path) { CommonSettings.UseExtFirmware = true; CommonSettings.UseExtFirmwareSettings = true; strcpy(CommonSettings.ExtFirmwarePath,_fw_path); }
 	#endif
 	if(_fw_boot) CommonSettings.BootFromFirmware = true;
 	if(_bios_swi) CommonSettings.SWIFromBIOS = true;
@@ -559,7 +559,7 @@ void CommandLine::process_movieCommands()
 	}
 	else if(record_movie_file != "")
 	{
-		FCEUI_SaveMovie(record_movie_file.c_str(), L"", 0, NULL, FCEUI_MovieGetRTCDefault());
+		FCEUI_SaveMovie(record_movie_file.c_str(), L"", START_BLANK, NULL, FCEUI_MovieGetRTCDefault());
 	}
 }
 

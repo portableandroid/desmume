@@ -55,6 +55,9 @@ ClientExecutionControl::ClientExecutionControl()
 	
 	_frameTime = 0.0;
 	_framesToSkip = 0;
+	_lastSetFrameSkip = 0.0;
+	_unskipStep = 0;
+	_dynamicBiasStep = 0;
 	_prevExecBehavior = ExecutionBehavior_Pause;
 	
 	_isGdbStubStarted = false;
@@ -69,6 +72,9 @@ ClientExecutionControl::ClientExecutionControl()
 	_settingsPending.cpuEngineID						= CPUEmulationEngineID_Interpreter;
 	_settingsPending.JITMaxBlockSize					= 12;
 	_settingsPending.slot1DeviceType					= NDS_SLOT1_RETAIL_AUTO;
+	
+	memset(&_settingsPending.fwConfig, 0, sizeof(FirmwareConfig));
+	
 	_settingsPending.filePathARM9BIOS					= std::string();
 	_settingsPending.filePathARM7BIOS					= std::string();
 	_settingsPending.filePathFirmware					= std::string();
@@ -86,6 +92,8 @@ ClientExecutionControl::ClientExecutionControl()
 	_settingsPending.enableFirmwareBoot					= false;
 	_settingsPending.enableDebugConsole					= false;
 	_settingsPending.enableEnsataEmulation				= false;
+	_settingsPending.wifiEmulationMode					= WifiEmulationLevel_Off;
+	_settingsPending.wifiBridgeDeviceIndex				= 0;
 	
 	_settingsPending.enableExecutionSpeedLimiter		= true;
 	_settingsPending.executionSpeed						= SPEED_SCALAR_NORMAL;
@@ -347,7 +355,7 @@ void ClientExecutionControl::SetFirmwareImagePath(const char *filePath)
 	}
 	else
 	{
-		this->_settingsPending.filePathFirmware = std::string(filePath, sizeof(CommonSettings.Firmware));
+		this->_settingsPending.filePathFirmware = std::string(filePath, sizeof(CommonSettings.ExtFirmwarePath));
 	}
 	
 	this->_newSettingsPendingOnReset = true;
@@ -488,6 +496,29 @@ void ClientExecutionControl::SetEnableBIOSPatchDelayLoop(bool enable)
 	pthread_mutex_unlock(&this->_mutexSettingsPendingOnNDSExec);
 }
 
+FirmwareConfig ClientExecutionControl::GetFirmwareConfig()
+{
+	pthread_mutex_lock(&this->_mutexSettingsPendingOnReset);
+	const FirmwareConfig outConfig = this->_settingsPending.fwConfig;
+	pthread_mutex_unlock(&this->_mutexSettingsPendingOnReset);
+	
+	return outConfig;
+}
+
+FirmwareConfig ClientExecutionControl::GetFirmwareConfigApplied()
+{
+	return this->_settingsApplied.fwConfig;
+}
+
+void ClientExecutionControl::SetFirmwareConfig(const FirmwareConfig &inConfig)
+{
+	pthread_mutex_lock(&this->_mutexSettingsPendingOnReset);
+	this->_settingsPending.fwConfig = inConfig;
+	
+	this->_newSettingsPendingOnReset = true;
+	pthread_mutex_unlock(&this->_mutexSettingsPendingOnReset);
+}
+
 bool ClientExecutionControl::GetEnableExternalFirmware()
 {
 	pthread_mutex_lock(&this->_mutexSettingsPendingOnReset);
@@ -560,6 +591,47 @@ void ClientExecutionControl::SetEnableEnsataEmulation(bool enable)
 	pthread_mutex_unlock(&this->_mutexSettingsPendingOnNDSExec);
 }
 
+int ClientExecutionControl::GetWifiEmulationMode()
+{
+	pthread_mutex_lock(&this->_mutexSettingsPendingOnReset);
+	const int wifiEmulationMode = this->_settingsPending.wifiEmulationMode;
+	pthread_mutex_unlock(&this->_mutexSettingsPendingOnReset);
+	
+	return wifiEmulationMode;
+}
+
+void ClientExecutionControl::SetWifiEmulationMode(int wifiEmulationMode)
+{
+	pthread_mutex_lock(&this->_mutexSettingsPendingOnReset);
+	this->_settingsPending.wifiEmulationMode = wifiEmulationMode;
+	
+	this->_newSettingsPendingOnReset = true;
+	pthread_mutex_unlock(&this->_mutexSettingsPendingOnReset);
+}
+
+int ClientExecutionControl::GetWifiBridgeDeviceIndex()
+{
+	pthread_mutex_lock(&this->_mutexSettingsPendingOnReset);
+	const int wifiBridgeDeviceIndex = this->_settingsPending.wifiBridgeDeviceIndex;
+	pthread_mutex_unlock(&this->_mutexSettingsPendingOnReset);
+	
+	return wifiBridgeDeviceIndex;
+}
+
+void ClientExecutionControl::SetWifiBridgeDeviceIndex(int wifiBridgeDeviceIndex)
+{
+	pthread_mutex_lock(&this->_mutexSettingsPendingOnReset);
+	this->_settingsPending.wifiBridgeDeviceIndex = wifiBridgeDeviceIndex;
+	
+	this->_newSettingsPendingOnReset = true;
+	pthread_mutex_unlock(&this->_mutexSettingsPendingOnReset);
+}
+
+uint8_t* ClientExecutionControl::GetCurrentSessionMACAddress()
+{
+	return (uint8_t *)FW_Mac;
+}
+
 bool ClientExecutionControl::GetEnableCheats()
 {
 	pthread_mutex_lock(&this->_mutexSettingsPendingOnNDSExec);
@@ -587,6 +659,11 @@ bool ClientExecutionControl::GetEnableSpeedLimiter()
 	return enable;
 }
 
+bool ClientExecutionControl::GetEnableSpeedLimiterApplied()
+{
+	return this->_settingsApplied.enableExecutionSpeedLimiter;
+}
+
 void ClientExecutionControl::SetEnableSpeedLimiter(bool enable)
 {
 	pthread_mutex_lock(&this->_mutexSettingsPendingOnExecutionLoopStart);
@@ -603,6 +680,11 @@ double ClientExecutionControl::GetExecutionSpeed()
 	pthread_mutex_unlock(&this->_mutexSettingsPendingOnExecutionLoopStart);
 	
 	return speedScalar;
+}
+
+double ClientExecutionControl::GetExecutionSpeedApplied()
+{
+	return this->_settingsApplied.executionSpeed;
 }
 
 void ClientExecutionControl::SetExecutionSpeed(double speedScalar)
@@ -903,6 +985,11 @@ void ClientExecutionControl::ApplySettingsOnReset()
 		this->_settingsApplied.enableExternalFirmware		= this->_settingsPending.enableExternalFirmware;
 		this->_settingsApplied.enableFirmwareBoot			= this->_settingsPending.enableFirmwareBoot;
 		
+		this->_settingsApplied.fwConfig						= this->_settingsPending.fwConfig;
+		
+		this->_settingsApplied.wifiEmulationMode			= this->_settingsPending.wifiEmulationMode;
+		this->_settingsApplied.wifiBridgeDeviceIndex		= this->_settingsPending.wifiBridgeDeviceIndex;
+		
 		this->_settingsApplied.cpuEmulationEngineName		= this->_settingsPending.cpuEmulationEngineName;
 		this->_settingsApplied.slot1DeviceName				= this->_settingsPending.slot1DeviceName;
 		this->_ndsFrameInfo.cpuEmulationEngineName			= this->_settingsApplied.cpuEmulationEngineName;
@@ -923,6 +1010,11 @@ void ClientExecutionControl::ApplySettingsOnReset()
 		CommonSettings.UseExtFirmware			= this->_settingsApplied.enableExternalFirmware;
 		CommonSettings.UseExtFirmwareSettings	= this->_settingsApplied.enableExternalFirmware;
 		CommonSettings.BootFromFirmware			= this->_settingsApplied.enableFirmwareBoot;
+		CommonSettings.WifiBridgeDeviceID		= this->_settingsApplied.wifiBridgeDeviceIndex;
+		CommonSettings.fwConfig					= this->_settingsApplied.fwConfig;
+		
+		wifiHandler->SetEmulationLevel((WifiEmulationLevel)this->_settingsApplied.wifiEmulationMode);
+		wifiHandler->SetBridgeDeviceIndex(this->_settingsApplied.wifiBridgeDeviceIndex);
 		
 		if (this->_settingsApplied.filePathARM9BIOS.length() == 0)
 		{
@@ -944,11 +1036,11 @@ void ClientExecutionControl::ApplySettingsOnReset()
 		
 		if (this->_settingsApplied.filePathFirmware.length() == 0)
 		{
-			memset(CommonSettings.Firmware, 0, sizeof(CommonSettings.Firmware));
+			memset(CommonSettings.ExtFirmwarePath, 0, sizeof(CommonSettings.ExtFirmwarePath));
 		}
 		else
 		{
-			strlcpy(CommonSettings.Firmware, this->_settingsApplied.filePathFirmware.c_str(), sizeof(CommonSettings.Firmware));
+			strlcpy(CommonSettings.ExtFirmwarePath, this->_settingsApplied.filePathFirmware.c_str(), sizeof(CommonSettings.ExtFirmwarePath));
 		}
 		
 		if (this->_settingsApplied.filePathSlot1R4.length() > 0)
@@ -1175,68 +1267,70 @@ double ClientExecutionControl::GetFrameTime()
 
 uint8_t ClientExecutionControl::CalculateFrameSkip(double startAbsoluteTime, double frameAbsoluteTime)
 {
-	static const double skipCurve[10]	= {0.60, 0.58, 0.55, 0.51, 0.46, 0.40, 0.30, 0.20, 0.10, 0.00};
-	static const double unskipCurve[10]	= {0.75, 0.70, 0.65, 0.60, 0.50, 0.40, 0.30, 0.20, 0.10, 0.00};
-	static size_t skipStep = 0;
-	static size_t unskipStep = 0;
-	static uint64_t lastSetFrameSkip = 0;
+	static const double unskipCurve[21]	= {0.98, 0.95, 0.91, 0.86, 0.80, 0.73, 0.65, 0.56, 0.46, 0.35, 0.23, 0.20, 0.17, 0.14, 0.11, 0.08, 0.06, 0.04, 0.02, 0.01, 0.00};
+	static const double dynamicBiasCurve[15] = {0.0, 0.2, 0.6, 1.2, 2.0, 3.0, 4.2, 5.6, 7.2, 9.0, 11.0, 13.2, 15.6, 18.2, 20.0};
 	
 	// Calculate the time remaining.
 	const double elapsed = this->GetCurrentAbsoluteTime() - startAbsoluteTime;
-	uint64_t framesToSkip = 0;
+	uint64_t framesToSkipInt = 0;
 	
 	if (elapsed > frameAbsoluteTime)
 	{
 		if (frameAbsoluteTime > 0)
 		{
-			framesToSkip = (uint64_t)( (((elapsed - frameAbsoluteTime) * FRAME_SKIP_AGGRESSIVENESS) / frameAbsoluteTime) + FRAME_SKIP_BIAS );
+			const double framesToSkipReal = ((elapsed * FRAME_SKIP_AGGRESSIVENESS) / frameAbsoluteTime) + dynamicBiasCurve[this->_dynamicBiasStep] + FRAME_SKIP_BIAS;
+			framesToSkipInt = (uint64_t)(framesToSkipReal + 0.5);
 			
-			if (framesToSkip > lastSetFrameSkip)
+			const double frameSkipDiff = framesToSkipReal - this->_lastSetFrameSkip;
+			if (this->_unskipStep > 0)
 			{
-				framesToSkip -= (uint64_t)((double)(framesToSkip - lastSetFrameSkip) * skipCurve[skipStep]);
-				if (skipStep < 9)
+				if (this->_dynamicBiasStep > 0)
 				{
-					skipStep++;
+					this->_dynamicBiasStep--;
 				}
 			}
-			else
+			else if (frameSkipDiff > 0.0)
 			{
-				framesToSkip += (uint64_t)((double)(lastSetFrameSkip - framesToSkip) * skipCurve[skipStep]);
-				if (skipStep > 0)
+				if (this->_dynamicBiasStep < 14)
 				{
-					skipStep--;
+					this->_dynamicBiasStep++;
 				}
 			}
+			
+			this->_unskipStep = 0;
+			this->_lastSetFrameSkip = framesToSkipReal;
 		}
 		else
 		{
 			static const double frameRate100x = (double)FRAME_SKIP_AGGRESSIVENESS / CalculateFrameAbsoluteTime(1.0/100.0);
-			framesToSkip = (uint64_t)(elapsed * frameRate100x);
+			framesToSkipInt = (uint64_t)(elapsed * frameRate100x);
 		}
-		
-		unskipStep = 0;
 	}
 	else
 	{
-		framesToSkip = (uint64_t)((double)lastSetFrameSkip * unskipCurve[unskipStep]);
-		if (unskipStep < 9)
+		const double framesToSkipReal = this->_lastSetFrameSkip * unskipCurve[this->_unskipStep];
+		framesToSkipInt = (uint64_t)(framesToSkipReal + 0.5);
+		
+		if (this->_unskipStep < 20)
 		{
-			unskipStep++;
+			this->_unskipStep++;
 		}
 		
-		skipStep = 0;
+		if (framesToSkipInt == 0)
+		{
+			this->_lastSetFrameSkip = 0.0;
+			this->_unskipStep = 20;
+		}
 	}
 	
 	// Bound the frame skip.
 	static const uint64_t kMaxFrameSkip = (uint64_t)MAX_FRAME_SKIP;
-	if (framesToSkip > kMaxFrameSkip)
+	if (framesToSkipInt > kMaxFrameSkip)
 	{
-		framesToSkip = kMaxFrameSkip;
+		framesToSkipInt = kMaxFrameSkip;
 	}
 	
-	lastSetFrameSkip = framesToSkip;
-	
-	return (uint8_t)framesToSkip;
+	return (uint8_t)framesToSkipInt;
 }
 
 double ClientExecutionControl::GetCurrentAbsoluteTime()

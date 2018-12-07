@@ -24,6 +24,8 @@
 
 #include "types.h"
 #include "ROMReader.h"
+#include "firmware.h"
+#include "render3D.h"
 #include "wifi.h"
 
 class CFIRMWARE;
@@ -72,7 +74,7 @@ extern BOOL click;
 #define NDS_FW_LANG_CHI 6
 #define NDS_FW_LANG_RES 7
 
-extern CFIRMWARE *firmware;
+extern CFIRMWARE *extFirmwareObj;
 
 #define DSGBA_LOADER_SIZE 512
 enum
@@ -213,17 +215,9 @@ enum NDS_CONSOLE_TYPE
 	NDS_CONSOLE_TYPE_FAT = 0xFF,
 	NDS_CONSOLE_TYPE_LITE = 0x20,
 	NDS_CONSOLE_TYPE_IQUE = 0x43,
-	NDS_CONSOLE_TYPE_IQUE_LIE = 0x63,
+	NDS_CONSOLE_TYPE_IQUE_LITE = 0x63,
 	NDS_CONSOLE_TYPE_DSI = 0xFE
 };
-
-enum WifiEmulationLevel
-{
-	WifiEmulationLevel_Off = 0,
-	WifiEmulationLevel_Normal = 10000,
-	WifiEmulationLevel_Compatibility = 65535,
-};
-extern WifiEmulationLevel wifiEmulationLevel;
 
 struct NDSSystem
 {
@@ -297,39 +291,6 @@ struct NDSSystem
 
 	bool isInVblank() const { return VCount >= 192; } 
 	bool isIn3dVblank() const { return VCount >= 192 && VCount<215; } 
-};
-
-/** /brief A touchscreen calibration point.
- */
-struct NDS_fw_touchscreen_cal {
-  u16 adc_x;
-  u16 adc_y;
-
-  u8 screen_x;
-  u8 screen_y;
-};
-
-#define MAX_FW_NICKNAME_LENGTH 10
-#define MAX_FW_MESSAGE_LENGTH 26
-
-struct NDS_fw_config_data
-{
-  NDS_CONSOLE_TYPE ds_type;
-
-  u8 fav_colour;
-  u8 birth_month;
-  u8 birth_day;
-
-  u16 nickname[MAX_FW_NICKNAME_LENGTH];
-  u8 nickname_len;
-
-  u16 message[MAX_FW_MESSAGE_LENGTH];
-  u8 message_len;
-
-  u8 language;
-
-  //touchscreen calibration
-  NDS_fw_touchscreen_cal touch_cal[2];
 };
 
 extern NDSSystem nds;
@@ -539,11 +500,15 @@ extern struct TCommonSettings
 		, GFX3D_Fog(true)
 		, GFX3D_Texture(true)
 		, GFX3D_LineHack(true)
-		, GFX3D_Renderer_Multisample(false)
+		, GFX3D_Renderer_MultisampleSize(0)
 		, GFX3D_Renderer_TextureScalingFactor(1) // Possible values: 1, 2, 4
 		, GFX3D_Renderer_TextureDeposterize(false)
 		, GFX3D_Renderer_TextureSmoothing(false)
 		, GFX3D_TXTHack(false)
+		, OpenGL_Emulation_ShadowPolygon(true)
+		, OpenGL_Emulation_SpecialZeroAlphaBlending(true)
+		, OpenGL_Emulation_DepthEqualsTestTolerance(true)
+		, OpenGL_Emulation_DepthLEqualPolygonFacing(false)
 		, jit_max_block_size(12)
 		, loadToMemory(false)
 		, UseExtBIOS(false)
@@ -568,14 +533,11 @@ extern struct TCommonSettings
 		, backupSave(false)
 		, SPU_sync_mode(1)
 		, SPU_sync_method(0)
+		, WifiBridgeDeviceID(0)
 	{
 		strcpy(ARM9BIOS, "biosnds9.bin");
 		strcpy(ARM7BIOS, "biosnds7.bin");
-		strcpy(Firmware, "firmware.bin");
-
-		/* WIFI mode: adhoc = 0, infrastructure = 1 */
-		wifi.mode = 1;
-		wifi.infraBridgeAdapter = 0;
+		strcpy(ExtFirmwarePath, "firmware.bin");
 
 		for(int i=0;i<16;i++)
 			spu_muteChannels[i] = false;
@@ -599,25 +561,31 @@ extern struct TCommonSettings
 	bool GFX3D_Fog;
 	bool GFX3D_Texture;
 	bool GFX3D_LineHack;
-	bool GFX3D_Renderer_Multisample;
+	int GFX3D_Renderer_MultisampleSize;
 	int GFX3D_Renderer_TextureScalingFactor; //must be one of {1,2,4}
 	bool GFX3D_Renderer_TextureDeposterize;
 	bool GFX3D_Renderer_TextureSmoothing;
 	bool GFX3D_TXTHack;
+	
+	bool OpenGL_Emulation_ShadowPolygon;
+	bool OpenGL_Emulation_SpecialZeroAlphaBlending;
+	bool OpenGL_Emulation_DepthEqualsTestTolerance;
+	bool OpenGL_Emulation_DepthLEqualPolygonFacing;
 
 	bool loadToMemory;
 
 	bool UseExtBIOS;
-	char ARM9BIOS[256];
-	char ARM7BIOS[256];
+	char ARM9BIOS[MAX_PATH];
+	char ARM7BIOS[MAX_PATH];
 	bool SWIFromBIOS;
 	bool PatchSWI3;
 
 	bool UseExtFirmware;
 	bool UseExtFirmwareSettings;
-	char Firmware[256];
+	char ExtFirmwarePath[MAX_PATH];
+	char ExtFirmwareUserSettingsPath[MAX_PATH];
 	bool BootFromFirmware;
-	NDS_fw_config_data fw_config;
+	FirmwareConfig fwConfig;
 
 	NDS_CONSOLE_TYPE ConsoleType;
 	bool DebugConsole;
@@ -655,10 +623,7 @@ extern struct TCommonSettings
 	bool use_jit;
 	u32	jit_max_block_size;
 	
-	struct _Wifi {
-		int mode;
-		int infraBridgeAdapter;
-	} wifi;
+	int WifiBridgeDeviceID;
 
 	enum MicMode
 	{
