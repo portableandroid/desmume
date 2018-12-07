@@ -478,6 +478,17 @@ ifeq ($(DESMUME_JIT),1)
    CXXFLAGS += -DHAVE_JIT
 endif
 
+ifneq (,$(findstring win,$(platform)))
+    ifneq (,$(findstring msvc,$(platform)))
+	LIBS += wsock32.lib
+    else
+	LIBS += -lwsock32
+    endif
+
+   CFLAGS += -I$(CORE_DIR)/frontend/windows/winpcap
+   CXXFLAGS += -I$(CORE_DIR)/frontend/windows/winpcap
+endif
+
 include Makefile.common
 
 ifeq ($(DEBUG), 1)
