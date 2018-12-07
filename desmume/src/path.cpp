@@ -264,7 +264,7 @@ void PathInfo::GetDefaultPath(char *pathToDefault, const char *key, int maxCount
 
 void PathInfo::ReadKey(char *pathToRead, const char *key)
 {
-#ifdef HOST_WINDOWS
+#if defined(HOST_WINDOWS) && !defined(__LIBRETRO__)
 	GetPrivateProfileString(SECTION, key, key, pathToRead, MAX_PATH, IniName);
 	if (strcmp(pathToRead, key) == 0) {
 		//since the variables are all intialized in this file they all use MAX_PATH
@@ -293,7 +293,7 @@ void PathInfo::ReadPathSettings()
 	ReadKey(pathToFirmware, FIRMWAREKEY);
 	ReadKey(pathToLua, LUAKEY);
 	ReadKey(pathToSlot1D, SLOT1DKEY);
-#ifdef HOST_WINDOWS
+#if defined(HOST_WINDOWS) && !defined(__LIBRETRO__)
 	GetPrivateProfileString(SECTION, FORMATKEY, "%f_%s_%r", screenshotFormat, MAX_FORMAT, IniName);
 	savelastromvisit = GetPrivateProfileBool(SECTION, LASTVISITKEY, true, IniName);
 	currentimageformat = (ImageFormat)GetPrivateProfileInt(SECTION, DEFAULTFORMATKEY, PNG, IniName);
