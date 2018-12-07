@@ -1053,6 +1053,38 @@ static void check_variables(bool first_boot)
    else
       firmwareLanguage = 1;
 
+   var.key = "desmume_opengl_shadow_polygon";
+   CommonSettings.OpenGL_Emulation_ShadowPolygon = true;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "disabled"))
+         CommonSettings.OpenGL_Emulation_ShadowPolygon = false;
+   }
+
+   var.key = "desmume_opengl_special_zero_alpha";
+   CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending = true;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "disabled"))
+         CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending = false;
+   }
+
+   var.key = "desmume_opengl_depth_equals_tolerance";
+   CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance = true;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "disabled"))
+         CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance = false;
+   }
+
+   var.key = "desmume_opengl_depth_lequal_polygon_facing";
+   CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing = false;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "enabled"))
+         CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing = true;
+   }
+
    var.key = "desmume_gfx_texture_smoothing";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -1371,6 +1403,10 @@ void retro_set_environment(retro_environment_t cb)
       { "desmume_color_depth", "OpenGL: Color Depth (restart); 16-bit|32-bit"},
       { "desmume_gfx_multisampling", "OpenGL: Multisampling AA; disabled|2|4|8|16|32" },
       { "desmume_gfx_texture_smoothing", "OpenGL: Texture Smoothing; disabled|enabled" },
+      { "desmume_opengl_shadow_polygon", "OpenGL: Shadow Polygons; enabled|disabled" },
+      { "desmume_opengl_special_zero_alpha", "OpenGL: Special 0 Alpha; enabled|disabled" },
+      { "desmume_opengl_depth_equals_tolerance", "OpenGL: Depth-Equal Tolerance; enabled|disabled" },
+      { "desmume_opengl_depth_lequal_polygon_facing", "OpenGL: Depth-LEqual Polygon Facing; disabled|enabled" },
 #endif
       { "desmume_gfx_highres_interpolate_color", "Soft3D: High-res Color Interpolation; disabled|enabled" },
       { "desmume_gfx_linehack", "Soft3D: Line Hack; enabled|disabled" },
