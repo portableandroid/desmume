@@ -1069,12 +1069,12 @@ static void check_variables(bool first_boot)
          CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending = false;
    }
 
-   var.key = "desmume_opengl_depth_equals_tolerance";
-   CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance = true;
+   var.key = "desmume_opengl_nds_depth_calculation";
+   CommonSettings.OpenGL_Emulation_NDSDepthCalculation = true;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       if (!strcmp(var.value, "disabled"))
-         CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance = false;
+         CommonSettings.OpenGL_Emulation_NDSDepthCalculation = false;
    }
 
    var.key = "desmume_opengl_depth_lequal_polygon_facing";
@@ -1405,7 +1405,7 @@ void retro_set_environment(retro_environment_t cb)
       { "desmume_gfx_texture_smoothing", "OpenGL: Texture Smoothing; disabled|enabled" },
       { "desmume_opengl_shadow_polygon", "OpenGL: Shadow Polygons; enabled|disabled" },
       { "desmume_opengl_special_zero_alpha", "OpenGL: Special 0 Alpha; enabled|disabled" },
-      { "desmume_opengl_depth_equals_tolerance", "OpenGL: Depth-Equal Tolerance; enabled|disabled" },
+      { "desmume_opengl_nds_depth_calculation", "OpenGL: NDS Depth Calculation; enabled|disabled" },
       { "desmume_opengl_depth_lequal_polygon_facing", "OpenGL: Depth-LEqual Polygon Facing; disabled|enabled" },
 #endif
       { "desmume_gfx_highres_interpolate_color", "Soft3D: High-res Color Interpolation; disabled|enabled" },
