@@ -1880,6 +1880,15 @@ static void SyncGpuBpp()
 		GPU->SetColorFormat(NDSColorFormat_BGR888_Rev);
 }
 
+static BOOL OpenCoreSystemCP(const char* filename_syscp)
+{
+	wchar_t wgarbage[1024];
+	char garbage[1024];
+	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, filename_syscp, -1, wgarbage, 1024);
+	int q = WideCharToMultiByte(CP_UTF8, 0, wgarbage, -1, garbage, 1024, NULL, NULL);
+	return OpenCore(garbage);
+}
+
 #define RENDERID_NULL_SAVED -1
 #define GPU3D_DEFAULT  GPU3D_SWRAST
 
@@ -2365,7 +2374,7 @@ int _main()
 	CommonSettings.GFX3D_TXTHack = GetPrivateProfileBool("3D", "EnableTXTHack", 0, IniName); // Default is off.
 	CommonSettings.OpenGL_Emulation_ShadowPolygon = GetPrivateProfileBool("3D", "EnableShadowPolygon", 1, IniName);
 	CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending = GetPrivateProfileBool("3D", "EnableSpecialZeroAlphaBlending", 1, IniName);
-	CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance = GetPrivateProfileBool("3D", "EnableDepthEqualsTestTolerance", 1, IniName);
+	CommonSettings.OpenGL_Emulation_NDSDepthCalculation = GetPrivateProfileBool("3D", "EnableNDSDepthCalculation", 1, IniName);
 	CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing = GetPrivateProfileBool("3D", "EnableDepthLEqualPolygonFacing", 0, IniName); // Default is off.
 	CommonSettings.GFX3D_Renderer_MultisampleSize = GetValid3DIntSetting("MultisampleSize", 0, possibleMSAA, 6);
 	Change3DCoreWithFallbackAndSave(cur3DCore);
@@ -2482,7 +2491,7 @@ int _main()
 
 	if (cmdline.nds_file != "")
 	{
-		if(OpenCore(cmdline.nds_file.c_str()))
+		if(OpenCoreSystemCP(cmdline.nds_file.c_str()))
 		{
 			romloaded = TRUE;
 		}
@@ -4307,7 +4316,7 @@ DOKEYDOWN:
 			//Else load it as a ROM
 			//-------------------------------------------------------
 
-			else if(OpenCore(filename))
+			else if(OpenCoreSystemCP(filename))
 			{
 				romloaded = TRUE;
 			}
@@ -5755,7 +5764,7 @@ LRESULT CALLBACK GFX3DSettingsDlgProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp)
 			CheckDlgButton(hw, IDC_TEX_SMOOTH, CommonSettings.GFX3D_Renderer_TextureSmoothing);
 			CheckDlgButton(hw, IDC_SHADOW_POLYGONS, CommonSettings.OpenGL_Emulation_ShadowPolygon);
 			CheckDlgButton(hw, IDC_S_0_ALPHA_BLEND, CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending);
-			CheckDlgButton(hw, IDC_DEPTH_EQUALS_TT, CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance);
+			CheckDlgButton(hw, IDC_NDS_DEPTH_CALC, CommonSettings.OpenGL_Emulation_NDSDepthCalculation);
 			CheckDlgButton(hw, IDC_DEPTH_L_EQUAL_PF, CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing);
 
 			SendDlgItemMessage(hw, IDC_NUD_PRESCALEHD, UDM_SETRANGE, 0, MAKELPARAM(16, 1));
@@ -5829,7 +5838,7 @@ LRESULT CALLBACK GFX3DSettingsDlgProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp)
 					CommonSettings.GFX3D_Renderer_TextureSmoothing = IsDlgCheckboxChecked(hw, IDC_TEX_SMOOTH);
 					CommonSettings.OpenGL_Emulation_ShadowPolygon = IsDlgCheckboxChecked(hw, IDC_SHADOW_POLYGONS);
 					CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending = IsDlgCheckboxChecked(hw, IDC_S_0_ALPHA_BLEND);
-					CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance = IsDlgCheckboxChecked(hw, IDC_DEPTH_EQUALS_TT);
+					CommonSettings.OpenGL_Emulation_NDSDepthCalculation = IsDlgCheckboxChecked(hw, IDC_NDS_DEPTH_CALC);
 					CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing = IsDlgCheckboxChecked(hw, IDC_DEPTH_L_EQUAL_PF);
 					
 					int newPrescaleHD = video.prescaleHD;
@@ -5871,7 +5880,7 @@ LRESULT CALLBACK GFX3DSettingsDlgProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp)
 					WritePrivateProfileBool("3D", "TextureSmooth", CommonSettings.GFX3D_Renderer_TextureSmoothing, IniName);
 					WritePrivateProfileBool("3D", "EnableShadowPolygon", CommonSettings.OpenGL_Emulation_ShadowPolygon, IniName);
 					WritePrivateProfileBool("3D", "EnableSpecialZeroAlphaBlending", CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending, IniName);
-					WritePrivateProfileBool("3D", "EnableDepthEqualsTestTolerance", CommonSettings.OpenGL_Emulation_DepthEqualsTestTolerance, IniName);
+					WritePrivateProfileBool("3D", "EnableNDSDepthCalculation", CommonSettings.OpenGL_Emulation_NDSDepthCalculation, IniName);
 					WritePrivateProfileBool("3D", "EnableDepthLEqualPolygonFacing", CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing, IniName);
 				}
 			case IDCANCEL:
