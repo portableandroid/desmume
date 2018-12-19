@@ -69,10 +69,13 @@
 
 #if defined(_WIN32) && defined(__LIBRETRO__)
 #include "frontend/windows/winpcap/pcap.h"
-#else
-#include <pcap.h>
-#endif
 typedef struct pcap pcap_t;
+#elif !defined(__LIBRETRO__)
+#include <pcap.h>
+typedef struct pcap pcap_t;
+#else
+typedef void* pcap_pkthdr;
+#endif
 
 //sometimes this isnt defined
 #ifndef PCAP_OPENFLAG_PROMISCUOUS
@@ -3096,6 +3099,10 @@ static const u8 SoftAP_DeauthFrame[] = {
 
 static void SoftAP_RXPacketGet_Callback(u_char *userData, const pcap_pkthdr *pktHeader, const u_char *pktData)
 {
+#if defined(__LIBRETRO__) && !defined(WIN32)
+	return;
+#else
+
 	const WIFI_IOREG_MAP &io = wifiHandler->GetWifiData().io;
 	
 	if ( (userData == NULL) || (pktData == NULL) || (pktHeader == NULL) )
@@ -3147,6 +3154,7 @@ static void SoftAP_RXPacketGet_Callback(u_char *userData, const pcap_pkthdr *pkt
 	
 	rawPacket->writeLocation += emulatorHeader.emuPacketSize;
 	rawPacket->count++;
+#endif
 }
 
 static void* Adhoc_RXPacketGetOnThread(void *arg)
@@ -3551,6 +3559,10 @@ void* SoftAPCommInterface::_GetBridgeDeviceAtIndex(int deviceIndex, char *outErr
 {
 	void *deviceList = NULL;
 	void *theDevice = NULL;
+
+#if defined(__LIBRETRO__) && !defined(WIN32)
+	return theDevice;
+#else
 	int result = this->_pcap->findalldevs((void **)&deviceList, outErrorBuf);
 	
 	if ( (result == -1) || (deviceList == NULL) )
@@ -3579,6 +3591,7 @@ void* SoftAPCommInterface::_GetBridgeDeviceAtIndex(int deviceIndex, char *outErr
 	this->_pcap->freealldevs(deviceList);
 	
 	return theDevice;
+#endif
 }
 
 bool SoftAPCommInterface::_IsDNSRequestToWFC(u16 ethertype, const u8 *body)
@@ -4488,6 +4501,9 @@ int WifiHandler::GetBridgeDeviceList(std::vector<std::string> *deviceStringList)
 		return result;
 	}
 
+#if defined(__LIBRETRO__) && !defined(WIN32)
+	return result;
+#elif
 	char errbuf[PCAP_ERRBUF_SIZE];
 	pcap_if_t *deviceList;
 	
@@ -4511,6 +4527,7 @@ int WifiHandler::GetBridgeDeviceList(std::vector<std::string> *deviceStringList)
 	}
 	
 	return deviceStringList->size();
+#endif
 }
 
 int WifiHandler::GetSelectedBridgeDeviceIndex()
