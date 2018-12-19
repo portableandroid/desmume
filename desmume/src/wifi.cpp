@@ -3099,7 +3099,7 @@ static const u8 SoftAP_DeauthFrame[] = {
 
 static void SoftAP_RXPacketGet_Callback(u_char *userData, const pcap_pkthdr *pktHeader, const u_char *pktData)
 {
-#if defined(__LIBRETRO__) && !defined(WIN32)
+#if defined(__LIBRETRO__) && !defined(_WIN32)
 	return;
 #else
 
@@ -3560,7 +3560,7 @@ void* SoftAPCommInterface::_GetBridgeDeviceAtIndex(int deviceIndex, char *outErr
 	void *deviceList = NULL;
 	void *theDevice = NULL;
 
-#if defined(__LIBRETRO__) && !defined(WIN32)
+#if defined(__LIBRETRO__) && !defined(_WIN32)
 	return theDevice;
 #else
 	int result = this->_pcap->findalldevs((void **)&deviceList, outErrorBuf);
@@ -4501,9 +4501,9 @@ int WifiHandler::GetBridgeDeviceList(std::vector<std::string> *deviceStringList)
 		return result;
 	}
 
-#if defined(__LIBRETRO__) && !defined(WIN32)
+#if defined(__LIBRETRO__) && !defined(_WIN32)
 	return result;
-#elif
+#else
 	char errbuf[PCAP_ERRBUF_SIZE];
 	pcap_if_t *deviceList;
 	
