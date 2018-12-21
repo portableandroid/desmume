@@ -48,7 +48,7 @@ ifneq (,$(findstring unix,$(platform)))
    TARGET := $(TARGET_NAME)_libretro.so
    fpic := -fPIC
    SHARED := -shared -Wl,--no-undefined -Wl,--version-script=$(CORE_DIR)/frontend/libretro/link.T
-   LIBS := -lpthread -lGL
+   LIBS := -lpthread -lGL -lpcap
    CXXFLAGS += -DHAVE_OPENGL
    DESMUME_OPENGL = 1
 	DESMUME_OPENGL_CORE = 1
