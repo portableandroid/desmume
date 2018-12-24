@@ -318,6 +318,7 @@ enum OGLErrorCode
 	OGLERROR_DRIVER_VERSION_TOO_OLD,
 	
 	OGLERROR_BEGINGL_FAILED,
+	OGLERROR_CLIENT_RESIZE_ERROR,
 	
 	OGLERROR_FEATURE_UNSUPPORTED,
 	OGLERROR_VBO_UNSUPPORTED,
@@ -584,7 +585,7 @@ extern bool (*oglrender_beginOpenGL)();
 extern void (*oglrender_endOpenGL)();
 
 //This is called by OGLRender whenever the framebuffer is resized.
-extern bool (*oglrender_framebufferDidResizeCallback)(size_t w, size_t h);
+extern bool (*oglrender_framebufferDidResizeCallback)(const bool isFBOSupported, size_t w, size_t h);
 
 // Helper functions for calling the above function pointers at the
 // beginning and ending of OpenGL commands.
@@ -600,7 +601,7 @@ void ENDGL();
 extern void (*OGLLoadEntryPoints_3_2_Func)();
 extern void (*OGLCreateRenderer_3_2_Func)(OpenGLRenderer **rendererPtr);
 
-bool IsVersionSupported(unsigned int checkVersionMajor, unsigned int checkVersionMinor, unsigned int checkVersionRevision);
+bool IsOpenGLDriverVersionSupported(unsigned int checkVersionMajor, unsigned int checkVersionMinor, unsigned int checkVersionRevision);
 
 class OpenGLTexture : public Render3DTexture
 {
@@ -767,6 +768,7 @@ public:
 	bool ValidateShaderProgramLink(GLuint theProgram) const;
 	void GetVersion(unsigned int *major, unsigned int *minor, unsigned int *revision) const;
 	void SetVersion(unsigned int major, unsigned int minor, unsigned int revision);
+	bool IsVersionSupported(unsigned int checkVersionMajor, unsigned int checkVersionMinor, unsigned int checkVersionRevision) const;
 	
 	virtual FragmentColor* GetFramebuffer();
 	virtual GLsizei GetLimitedMultisampleSize() const;
