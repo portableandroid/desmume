@@ -55,15 +55,17 @@ static GLuint texture_type    = GL_RGB;
 #include <emmintrin.h>
 #endif
 
-#define LAYOUT_TOP_BOTTOM                 0
-#define LAYOUT_BOTTOM_TOP                 1
-#define LAYOUT_LEFT_RIGHT                 2
-#define LAYOUT_RIGHT_LEFT                 3
-#define LAYOUT_TOP_ONLY                   4
-#define LAYOUT_BOTTOM_ONLY                5
-#define LAYOUT_HYBRID_TOP_ONLY            6
-#define LAYOUT_HYBRID_BOTTOM_ONLY         7
-#define LAYOUTS_MAX 8
+enum {
+   LAYOUT_TOP_BOTTOM = 0,
+   LAYOUT_BOTTOM_TOP = 1,
+   LAYOUT_LEFT_RIGHT = 2,
+   LAYOUT_RIGHT_LEFT = 3,
+   LAYOUT_TOP_ONLY = 4,
+   LAYOUT_BOTTOM_ONLY = 5,
+   LAYOUT_HYBRID_TOP_ONLY = 6,
+   LAYOUT_HYBRID_BOTTOM_ONLY = 7,
+   LAYOUTS_MAX = 8
+};
 
 retro_log_printf_t log_cb = NULL;
 static retro_video_refresh_t video_cb = NULL;
@@ -112,7 +114,7 @@ unsigned scale = 1;
 
 int current_layout = LAYOUT_TOP_BOTTOM;
 
-#define NDS_MAX_SCREEN_GAP               100
+const int NDS_MAX_SCREEN_GAP = 100;
 
 static inline int gap_size()
 {
