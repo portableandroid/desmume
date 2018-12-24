@@ -76,7 +76,6 @@ static struct retro_hw_render_callback hw_render;
 volatile bool execute = 0;
 
 static int delay_timer = 0;
-static bool quick_switch_enable = false;
 static bool mouse_enable = false;
 static double mouse_speed= 1.0;
 static double mouse_x_delta = 0.0;
@@ -891,8 +890,6 @@ static void check_variables(bool first_boot)
        static int old_layout_id      = -1;
        unsigned new_layout_id        = 0;
 
-       quick_switch_enable = false;
-
        if (!strcmp(var.value, "top/bottom"))
           new_layout_id = LAYOUT_TOP_BOTTOM;
        else if (!strcmp(var.value, "bottom/top"))
@@ -906,20 +903,9 @@ static void check_variables(bool first_boot)
        else if (!strcmp(var.value, "bottom only"))
            new_layout_id = LAYOUT_BOTTOM_ONLY;
        else if(!strcmp(var.value, "hybrid/top"))
-       {
            new_layout_id = LAYOUT_HYBRID_TOP_ONLY;
-           quick_switch_enable = true;
-       }
        else if(!strcmp(var.value, "hybrid/bottom"))
-       {
            new_layout_id = LAYOUT_HYBRID_BOTTOM_ONLY;
-           quick_switch_enable = true;
-       }
-       else if (!strcmp(var.value, "quick switch"))
-       {
-           new_layout_id = LAYOUT_TOP_ONLY;
-           quick_switch_enable = true;
-       }
 
        if (old_layout_id != new_layout_id)
        {
@@ -927,8 +913,6 @@ static void check_variables(bool first_boot)
           current_layout = new_layout_id;
        }
     }
-    else
-       quick_switch_enable = false;
 
     var.key = "desmume_hybrid_layout_scale";
 
@@ -1414,7 +1398,7 @@ void retro_set_environment(retro_environment_t cb)
       { "desmume_gfx_edgemark", "Edge Marking; enabled|disabled" },
       { "desmume_gfx_texture_scaling", "Texture Scaling (xBrz); 1|2|4" },
       { "desmume_gfx_texture_deposterize", "Texture Deposterization; disabled|enabled" },
-      { "desmume_screens_layout", "Screen Layout; top/bottom|bottom/top|left/right|right/left|top only|bottom only|quick switch|hybrid/top|hybrid/bottom" },
+      { "desmume_screens_layout", "Screen Layout; top/bottom|bottom/top|left/right|right/left|top only|bottom only|hybrid/top|hybrid/bottom" },
       { "desmume_screens_gap", "Screen Gap; 0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100" },
       { "desmume_hybrid_layout_scale", "Hybrid Layout: Scale; 1|3"},
       { "desmume_hybrid_showboth_screens", "Hybrid Layout: Show Both Screens; enabled|disabled"},
@@ -2038,19 +2022,31 @@ void retro_run (void)
    // BUTTONS
    NDS_beginProcessingInput();
 
-   if(input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3) && quick_switch_enable && delay_timer == 0)
+   if(input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3) && delay_timer == 0)
    {
       switch (current_layout)
       {
+         case LAYOUT_TOP_BOTTOM:
+            current_layout = LAYOUT_BOTTOM_TOP;
+            break;
+         case LAYOUT_BOTTOM_TOP:
+            current_layout = LAYOUT_TOP_BOTTOM;
+            break;
+         case LAYOUT_LEFT_RIGHT:
+            current_layout = LAYOUT_RIGHT_LEFT;
+            break;
+         case LAYOUT_RIGHT_LEFT:
+            current_layout = LAYOUT_LEFT_RIGHT;
+            break;
          case LAYOUT_TOP_ONLY:
             current_layout = LAYOUT_BOTTOM_ONLY;
             break;
          case LAYOUT_BOTTOM_ONLY:
             current_layout = LAYOUT_TOP_ONLY;
             break;
-		case LAYOUT_HYBRID_TOP_ONLY:
-			current_layout = LAYOUT_HYBRID_BOTTOM_ONLY;
+         case LAYOUT_HYBRID_TOP_ONLY:
 			{
+            current_layout = LAYOUT_HYBRID_BOTTOM_ONLY;
 				//Need to swap around DST variables
 				uint16_t*swap = layout.dst;
 				layout.dst = layout.dst2;
@@ -2063,9 +2059,9 @@ void retro_run (void)
 				}
 			}
 			break;
-		case LAYOUT_HYBRID_BOTTOM_ONLY:
-			current_layout = LAYOUT_HYBRID_TOP_ONLY;
+		   case LAYOUT_HYBRID_BOTTOM_ONLY:
 			{
+            current_layout = LAYOUT_HYBRID_TOP_ONLY;
 				uint16_t*swap = layout.dst;
 				layout.dst = layout.dst2;
 				layout.dst2 = swap;
