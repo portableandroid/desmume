@@ -147,7 +147,7 @@ void main() \n\
 	\n\
 	vtxPosition = inPosition; \n\
 	vtxTexCoord = texScaleMtx * inTexCoord0; \n\
-	vtxColor = vec4(inColor * 4.0, polyAlpha); \n\
+	vtxColor = vec4(inColor / 63.0, polyAlpha); \n\
 	\n\
 	gl_Position = vtxPosition; \n\
 } \n\
@@ -197,6 +197,9 @@ out vec4 outPolyID;\n\
 #if ENABLE_FOG\n\
 out vec4 outFogAttributes;\n\
 #endif\n\
+#if IS_CONSERVATIVE_DEPTH_SUPPORTED && (USE_NDS_DEPTH_CALCULATION || ENABLE_FOG) && !NEEDS_DEPTH_EQUALS_TEST && !ENABLE_W_DEPTH\n\
+layout (depth_less) out float gl_FragDepth;\n\
+#endif\n\
 \n\
 void main()\n\
 {\n\
@@ -206,18 +209,6 @@ void main()\n\
 #endif\n\
 #if ENABLE_FOG\n\
 	vec4 newFogAttributes = vec4(0.0, 0.0, 0.0, 0.0);\n\
-#endif\n\
-	\n\
-#if USE_NDS_DEPTH_CALCULATION || ENABLE_FOG\n\
-	float depthOffset = (polyDepthOffsetMode == 0) ? 0.0 : ((polyDepthOffsetMode == 1) ? -DEPTH_EQUALS_TEST_TOLERANCE : DEPTH_EQUALS_TEST_TOLERANCE);\n\
-	\n\
-	#if ENABLE_W_DEPTH\n\
-	float newFragDepthValue = clamp( ( (vtxPosition.w * 4096.0) + depthOffset ) / 16777215.0, 0.0, 1.0 );\n\
-	#else\n\
-	float vertW = (vtxPosition.w == 0.0) ? 0.00000001 : vtxPosition.w;\n\
-	// hack: when using z-depth, drop some LSBs so that the overworld map in Dragon Quest IV shows up correctly\n\
-	float newFragDepthValue = clamp( ( (floor(((vtxPosition.z/vertW) * 0.5 + 0.5) * 4194303.0) * 4.0) + depthOffset ) / 16777215.0, 0.0, 1.0 );\n\
-	#endif\n\
 #endif\n\
 	\n\
 	if ((polyMode != 3u) || polyDrawShadow)\n\
@@ -299,6 +290,27 @@ void main()\n\
 	outFogAttributes = newFogAttributes;\n\
 #endif\n\
 #if USE_NDS_DEPTH_CALCULATION || ENABLE_FOG\n\
+	// It is tempting to perform the NDS depth calculation in the vertex shader rather than in the fragment shader.\n\
+	// Resist this temptation! It is much more reliable to do the depth calculation in the fragment shader due to\n\
+	// subtle interpolation differences between various GPUs and/or drivers. If the depth calculation is not done\n\
+	// here, then it is very possible for the user to experience Z-fighting in certain rendering situations.\n\
+	\n\
+	#if NEEDS_DEPTH_EQUALS_TEST\n\
+		float depthOffset = (polyDepthOffsetMode == 0) ? 0.0 : ((polyDepthOffsetMode == 1) ? -DEPTH_EQUALS_TEST_TOLERANCE : DEPTH_EQUALS_TEST_TOLERANCE);\n\
+		#if ENABLE_W_DEPTH\n\
+		float newFragDepthValue = clamp( ( (vtxPosition.w * 4096.0) + depthOffset ) / 16777215.0, 0.0, 1.0 );\n\
+		#else\n\
+		float newFragDepthValue = clamp( ( (floor(gl_FragCoord.z * 4194303.0) * 4.0) + depthOffset ) / 16777215.0, 0.0, 1.0 );\n\
+		#endif\n\
+	#else\n\
+		#if ENABLE_W_DEPTH\n\
+		float newFragDepthValue = clamp( (vtxPosition.w * 4096.0) / 16777215.0, 0.0, 1.0 );\n\
+		#else\n\
+		// hack: when using z-depth, drop some LSBs so that the overworld map in Dragon Quest IV shows up correctly\n\
+		float newFragDepthValue = clamp( (floor(gl_FragCoord.z * 4194303.0) * 4.0) / 16777215.0, 0.0, 1.0 );\n\
+		#endif\n\
+	#endif\n\
+	\n\
 	gl_FragDepth = newFragDepthValue;\n\
 #endif\n\
 }\n\
@@ -797,9 +809,6 @@ Render3DError OpenGLRenderer_3_2::InitExtensions()
 	this->_deviceInfo.isEdgeMarkSupported = true;
 	this->_deviceInfo.isFogSupported = true;
 	
-	// Initialize OpenGL
-	this->InitTables();
-	
 	glGenTextures(1, &OGLRef.texFinalColorID);
 	glActiveTexture(GL_TEXTURE0 + OGLTextureUnitID_FinalColor);
 	glBindTexture(GL_TEXTURE_2D, OGLRef.texFinalColorID);
@@ -818,6 +827,8 @@ Render3DError OpenGLRenderer_3_2::InitExtensions()
 	this->willFlipAndConvertFramebufferOnGPU = true;
 	
 	this->isSampleShadingSupported = this->IsExtensionPresent(&oglExtensionSet, "GL_ARB_sample_shading");
+	this->isConservativeDepthSupported = this->IsExtensionPresent(&oglExtensionSet, "GL_ARB_conservative_depth") && IsOpenGLDriverVersionSupported(4, 0, 0);
+	this->isConservativeDepthAMDSupported = this->IsExtensionPresent(&oglExtensionSet, "GL_AMD_conservative_depth") && IsOpenGLDriverVersionSupported(4, 0, 0);
 	
 	this->_enableTextureSmoothing = CommonSettings.GFX3D_Renderer_TextureSmoothing;
 	this->_emulateShadowPolygon = CommonSettings.OpenGL_Emulation_ShadowPolygon;
@@ -1259,7 +1270,7 @@ Render3DError OpenGLRenderer_3_2::CreateVAOs()
 	glEnableVertexAttribArray(OGLVertexAttributeID_Color);
 	glVertexAttribPointer(OGLVertexAttributeID_Position, 4, GL_FLOAT, GL_FALSE, sizeof(VERT), (const GLvoid *)offsetof(VERT, coord));
 	glVertexAttribPointer(OGLVertexAttributeID_TexCoord0, 2, GL_FLOAT, GL_FALSE, sizeof(VERT), (const GLvoid *)offsetof(VERT, texcoord));
-	glVertexAttribPointer(OGLVertexAttributeID_Color, 3, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(VERT), (const GLvoid *)offsetof(VERT, color));
+	glVertexAttribPointer(OGLVertexAttributeID_Color, 3, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(VERT), (const GLvoid *)offsetof(VERT, color));
 	
 	glBindVertexArray(0);
 	
@@ -1301,14 +1312,38 @@ Render3DError OpenGLRenderer_3_2::CreateGeometryPrograms()
 	OGLGeometryFlags programFlags;
 	programFlags.value = 0;
 	
-	std::stringstream shaderHeader;
-	shaderHeader << "#version 150\n";
-	shaderHeader << "#define DEPTH_EQUALS_TEST_TOLERANCE " << DEPTH_EQUALS_TEST_TOLERANCE << ".0\n";
-	shaderHeader << "\n";
+	std::stringstream vtxShaderHeader;
+	if (this->isConservativeDepthSupported || this->isConservativeDepthAMDSupported)
+	{
+		vtxShaderHeader << "#version 400\n";
+	}
+	else
+	{
+		vtxShaderHeader << "#version 150\n";
+	}
+	vtxShaderHeader << "\n";
 	
-	std::string vtxShaderCode  = shaderHeader.str() + std::string(GeometryVtxShader_150);
+	std::string vtxShaderCode  = vtxShaderHeader.str() + std::string(GeometryVtxShader_150);
 	
-	for (size_t flagsValue = 0; flagsValue < 64; flagsValue++, programFlags.value++)
+	std::stringstream fragShaderHeader;
+	if (this->isConservativeDepthSupported || this->isConservativeDepthAMDSupported)
+	{
+		fragShaderHeader << "#version 400\n";
+		
+		// Prioritize using GL_AMD_conservative_depth over GL_ARB_conservative_depth, since AMD drivers
+		// seem to have problems with GL_ARB_conservative_depth.
+		fragShaderHeader << ((this->isConservativeDepthAMDSupported) ? "#extension GL_AMD_conservative_depth : require\n" : "#extension GL_ARB_conservative_depth : require\n");
+	}
+	else
+	{
+		fragShaderHeader << "#version 150\n";
+	}
+	fragShaderHeader << "\n";
+	fragShaderHeader << "#define IS_CONSERVATIVE_DEPTH_SUPPORTED " << ((this->isConservativeDepthSupported || this->isConservativeDepthAMDSupported) ? 1 : 0) << "\n";
+	fragShaderHeader << "#define DEPTH_EQUALS_TEST_TOLERANCE " << DEPTH_EQUALS_TEST_TOLERANCE << ".0\n";
+	fragShaderHeader << "\n";
+	
+	for (size_t flagsValue = 0; flagsValue < 128; flagsValue++, programFlags.value++)
 	{
 		std::stringstream shaderFlags;
 		shaderFlags << "#define USE_TEXTURE_SMOOTHING " << ((this->_enableTextureSmoothing) ? 1 : 0) << "\n";
@@ -1320,9 +1355,10 @@ Render3DError OpenGLRenderer_3_2::CreateGeometryPrograms()
 		shaderFlags << "#define ENABLE_FOG " << ((programFlags.EnableFog) ? 1 : 0) << "\n";
 		shaderFlags << "#define ENABLE_EDGE_MARK " << ((programFlags.EnableEdgeMark) ? 1 : 0) << "\n";
 		shaderFlags << "#define TOON_SHADING_MODE " << ((programFlags.ToonShadingMode) ? 1 : 0) << "\n";
+		shaderFlags << "#define NEEDS_DEPTH_EQUALS_TEST " << ((programFlags.NeedsDepthEqualsTest) ? 1 : 0) << "\n";
 		shaderFlags << "\n";
 		
-		std::string fragShaderCode = shaderHeader.str() + shaderFlags.str() + std::string(GeometryFragShader_150);
+		std::string fragShaderCode = fragShaderHeader.str() + shaderFlags.str() + std::string(GeometryFragShader_150);
 		
 		error = this->ShaderProgramCreate(OGLRef.vertexGeometryShaderID,
 										  OGLRef.fragmentGeometryShaderID[flagsValue],
@@ -1426,7 +1462,7 @@ void OpenGLRenderer_3_2::DestroyGeometryPrograms()
 	OGLRef.uboRenderStatesID = 0;
 	OGLRef.tboPolyStatesID = 0;
 	
-	for (size_t flagsValue = 0; flagsValue < 64; flagsValue++)
+	for (size_t flagsValue = 0; flagsValue < 128; flagsValue++)
 	{
 		if (OGLRef.programGeometryID[flagsValue] == 0)
 		{
@@ -2151,6 +2187,8 @@ Render3DError OpenGLRenderer_3_2::BeginRender(const GFX3D &engine)
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, OGLRef.iboGeometryIndexID);
 	glBindBuffer(GL_TEXTURE_BUFFER, OGLRef.tboPolyStatesID);
 	
+	this->_renderNeedsDepthEqualsTest = false;
+	
 	size_t vertIndexCount = 0;
 	GLushort *indexPtr = (GLushort *)glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, engine.polylist->count * 6 * sizeof(GLushort), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
 	OGLPolyStates *polyStates = (OGLPolyStates *)glMapBufferRange(GL_TEXTURE_BUFFER, 0, engine.polylist->count * sizeof(OGLPolyStates), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
@@ -2190,15 +2228,16 @@ Render3DError OpenGLRenderer_3_2::BeginRender(const GFX3D &engine)
 		
 		// Get the polygon's facing.
 		const size_t n = polyType - 1;
-		float facing = (vert[0].y + vert[n].y) * (vert[0].x - vert[n].x)
-		             + (vert[1].y + vert[0].y) * (vert[1].x - vert[0].x)
-		             + (vert[2].y + vert[1].y) * (vert[2].x - vert[1].x);
+		float facing = (vert[0].y + vert[n].y) * (vert[0].x - vert[n].x) +
+		               (vert[1].y + vert[0].y) * (vert[1].x - vert[0].x) +
+		               (vert[2].y + vert[1].y) * (vert[2].x - vert[1].x);
 		
 		for (size_t j = 2; j < n; j++)
 		{
 			facing += (vert[j+1].y + vert[j].y) * (vert[j+1].x - vert[j].x);
 		}
 		
+		this->_renderNeedsDepthEqualsTest = this->_renderNeedsDepthEqualsTest || (thePoly.attribute.DepthEqualTest_Enable != 0);
 		this->_isPolyFrontFacing[i] = (facing < 0);
 		
 		// Get the texture that is to be attached to this polygon.
@@ -2232,6 +2271,7 @@ Render3DError OpenGLRenderer_3_2::BeginRender(const GFX3D &engine)
 	this->_geometryProgramFlags.EnableFog = (this->_enableFog) ? 1 : 0;
 	this->_geometryProgramFlags.EnableEdgeMark = (this->_enableEdgeMark) ? 1 : 0;
 	this->_geometryProgramFlags.ToonShadingMode = (engine.renderState.shading) ? 1 : 0;
+	this->_geometryProgramFlags.NeedsDepthEqualsTest = (this->_renderNeedsDepthEqualsTest) ? 1 : 0;
 	
 	glUseProgram(OGLRef.programGeometryID[this->_geometryProgramFlags.value]);
 	glUniform1i(OGLRef.uniformTexDrawOpaque[this->_geometryProgramFlags.value], GL_FALSE);
