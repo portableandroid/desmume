@@ -2239,6 +2239,13 @@ void retro_run (void)
 #ifdef HAVE_OPENGL
       if (!skipped)
       {
+          GLint drawfb = 0, readfb = 0, drawb = 0, readb = 0, active_texture = 0, program = 0;
+          glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawfb);
+          glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readfb);
+          glGetIntegerv(GL_DRAW_BUFFER, &drawb);
+          glGetIntegerv(GL_READ_BUFFER, &readb);
+          glGetIntegerv(GL_ACTIVE_TEXTURE, &active_texture);
+
           glActiveTexture(GL_TEXTURE0);
           glUseProgram(0);
 
@@ -2291,7 +2298,13 @@ void retro_run (void)
           glBlitFramebuffer(0, 0, layout.width, layout.height, 0, 0, layout.width, layout.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
           glBindTexture(GL_TEXTURE_2D, 0);
           glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-          glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+          glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawfb);
+          glBindFramebuffer(GL_READ_FRAMEBUFFER, readfb);
+          glReadBuffer(readb);
+          glDrawBuffer(drawb);
+          glActiveTexture(active_texture);
+          glUseProgram(program);
       }
 
       video_cb(skipped ? 0 : RETRO_HW_FRAME_BUFFER_VALID, layout.width, layout.height, 0);

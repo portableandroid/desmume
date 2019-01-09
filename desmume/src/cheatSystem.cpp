@@ -1,5 +1,5 @@
 /*
-	Copyright (C) 2009-2017 DeSmuME team
+	Copyright (C) 2009-2019 DeSmuME team
 
 	This file is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@
 #include <algorithm>
 
 #include "streams/file_stream_transforms.h"
+static const char hexValid[23] = {"0123456789ABCDEFabcdef"};
 
 CHEATS *cheats = NULL;
 CHEATSEARCH *cheatSearch = NULL;
