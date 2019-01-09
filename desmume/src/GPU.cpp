@@ -8386,7 +8386,7 @@ void GPUEngineA::_HandleDisplayModeMainMemory(const GPUEngineLineInfo &lineInfo)
 	{
 		case NDSColorFormat_BGR555_Rev:
 		{
-			u32 *__restrict dst = (u32 *__restrict)((u16 *)this->nativeBuffer + (lineInfo.indexNative * GPU_FRAMEBUFFER_NATIVE_WIDTH));
+			u32 *__restrict dst = (u32 *__restrict)((u16 *)this->_nativeBuffer + (lineInfo.indexNative * GPU_FRAMEBUFFER_NATIVE_WIDTH));
 			for (size_t i = 0; i < GPU_FRAMEBUFFER_NATIVE_WIDTH * sizeof(u16) / sizeof(u32); i++)
 			{
 				const u32 src = DISP_FIFOrecv();
@@ -8401,7 +8401,7 @@ void GPUEngineA::_HandleDisplayModeMainMemory(const GPUEngineLineInfo &lineInfo)
 			
 		case NDSColorFormat_BGR666_Rev:
 		{
-			FragmentColor *__restrict dst = (FragmentColor *__restrict)this->nativeBuffer + (lineInfo.indexNative * GPU_FRAMEBUFFER_NATIVE_WIDTH);
+			FragmentColor *__restrict dst = (FragmentColor *__restrict)this->_nativeBuffer + (lineInfo.indexNative * GPU_FRAMEBUFFER_NATIVE_WIDTH);
 			for (size_t i = 0; i < GPU_FRAMEBUFFER_NATIVE_WIDTH; i+=2)
 			{
 				const u32 src = DISP_FIFOrecv();
@@ -8413,7 +8413,7 @@ void GPUEngineA::_HandleDisplayModeMainMemory(const GPUEngineLineInfo &lineInfo)
 			
 		case NDSColorFormat_BGR888_Rev:
 		{
-			FragmentColor *__restrict dst = (FragmentColor *__restrict)this->nativeBuffer + (lineInfo.indexNative * GPU_FRAMEBUFFER_NATIVE_WIDTH);
+			FragmentColor *__restrict dst = (FragmentColor *__restrict)this->_nativeBuffer + (lineInfo.indexNative * GPU_FRAMEBUFFER_NATIVE_WIDTH);
 			for (size_t i = 0; i < GPU_FRAMEBUFFER_NATIVE_WIDTH; i+=2)
 			{
 				const u32 src = DISP_FIFOrecv();
