@@ -49,7 +49,7 @@ ifneq (,$(findstring unix,$(platform)))
    fpic := -fPIC
    SHARED := -shared -Wl,--no-undefined -Wl,--version-script=$(CORE_DIR)/frontend/libretro/link.T
    LIBS := -lpthread -lGL -lpcap
-   CXXFLAGS += -DHAVE_OPENGL
+   CXXFLAGS += -DHAVE_OPENGL -std=gnu++11
    DESMUME_OPENGL = 1
 	DESMUME_OPENGL_CORE = 1
 
@@ -129,6 +129,8 @@ else ifeq ($(platform), osx)
    SHARED := -dynamiclib -framework OpenGL
    DESMUME_JIT = 1
    fpic += -mmacosx-version-min=10.2
+   CFLAGS += -DAPPLE_ATOMICS
+   CXXFLAGS += -DAPPLE_ATOMICS
    ifndef ($(NOUNIVERSAL))
       CFLAGS += $(ARCHFLAGS)
       CXXFLAGS += $(ARCHFLAGS)
@@ -146,7 +148,8 @@ else ifneq (,$(findstring ios,$(platform)))
 
    CC = clang -arch armv7 -isysroot $(IOSSDK)
    CXX = clang++ -arch armv7 -isysroot $(IOSSDK)
-   CXXFLAGS = -DUSE_POSIX_MEMALIGN -D__RETRO_ARM__
+   CFLAGS += -DAPPLE_ATOMICS
+   CXXFLAGS = -DUSE_POSIX_MEMALIGN -D__RETRO_ARM__ -DAPPLE_ATOMICS
    fpic := -fPIC
    SHARED := -dynamiclib
    DESMUME_JIT_ARM = 1
@@ -482,7 +485,7 @@ ifneq (,$(findstring win,$(platform)))
     ifneq (,$(findstring msvc,$(platform)))
 	LIBS += wsock32.lib
     else
-	LIBS += -lwsock32
+	LIBS += -lws2_32
     endif
 
    CFLAGS += -I$(CORE_DIR)/frontend/windows/winpcap
