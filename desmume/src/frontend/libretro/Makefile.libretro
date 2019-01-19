@@ -274,7 +274,7 @@ else ifeq ($(platform), android)
    TARGET := $(TARGET_NAME)_libretro_$(TARGET_NAME).so
    CC = arm-linux-androideabi-gcc$(EXE_EXT)
    CXX = arm-linux-androideabi-g++$(EXE_EXT)
-   CXXFLAGS += -D__RETRO_ARM__
+   CXXFLAGS += -D__RETRO_ARM__ -std=gnu++11
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/libretro/link.T
    DESMUME_JIT_ARM = 1
