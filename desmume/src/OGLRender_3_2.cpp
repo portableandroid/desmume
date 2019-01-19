@@ -67,6 +67,11 @@ OGLEXT(PFNGLGETACTIVEUNIFORMBLOCKIVPROC, glGetActiveUniformBlockiv) // Core in v
 // TBO
 OGLEXT(PFNGLTEXBUFFERPROC, glTexBuffer) // Core in v3.1
 
+// Sync Objects
+OGLEXT(PFNGLFENCESYNCPROC, glFenceSync) // Core in v3.2
+OGLEXT(PFNGLWAITSYNCPROC, glWaitSync) // Core in v3.2
+OGLEXT(PFNGLDELETESYNCPROC, glDeleteSync) // Core in v3.2
+
 void OGLLoadEntryPoints_3_2()
 {
 	// Basic Functions
@@ -103,6 +108,11 @@ void OGLLoadEntryPoints_3_2()
 	
 	// TBO
 	INITOGLEXT(PFNGLTEXBUFFERPROC, glTexBuffer)
+
+	// Sync Objects
+	INITOGLEXT(PFNGLFENCESYNCPROC, glFenceSync) // Core in v3.2
+	INITOGLEXT(PFNGLWAITSYNCPROC, glWaitSync) // Core in v3.2
+	INITOGLEXT(PFNGLDELETESYNCPROC, glDeleteSync) // Core in v3.2
 }
 
 // Vertex shader for geometry, GLSL 1.50
@@ -290,10 +300,10 @@ void main()\n\
 		#endif\n\
 	#else\n\
 		#if ENABLE_W_DEPTH\n\
-		gl_FragDepth = clamp( (4096.0/gl_FragCoord.w) / 16777215.0, 0.0, 1.0 );\n\
+		gl_FragDepth = (4096.0/gl_FragCoord.w) / 16777215.0;\n\
 		#else\n\
 		// hack: when using z-depth, drop some LSBs so that the overworld map in Dragon Quest IV shows up correctly\n\
-		gl_FragDepth = clamp( (floor(gl_FragCoord.z * 4194303.0) * 4.0) / 16777215.0, 0.0, 1.0 );\n\
+		gl_FragDepth = (floor(gl_FragCoord.z * 4194303.0) * 4.0) / 16777215.0;\n\
 		#endif\n\
 	#endif\n\
 #endif\n\
@@ -760,6 +770,11 @@ void OGLCreateRenderer_3_2(OpenGLRenderer **rendererPtr)
 	}
 }
 
+OpenGLRenderer_3_2::OpenGLRenderer_3_2()
+{
+	_syncBufferSetup = NULL;
+}
+
 OpenGLRenderer_3_2::~OpenGLRenderer_3_2()
 {
 	glFinish();
@@ -944,7 +959,6 @@ Render3DError OpenGLRenderer_3_2::CreateFBOs()
 	// Set up FBO render targets
 	glGenTextures(1, &OGLRef.texCIColorID);
 	glGenTextures(1, &OGLRef.texCIFogAttrID);
-	glGenTextures(1, &OGLRef.texCIPolyID);
 	glGenTextures(1, &OGLRef.texCIDepthStencilID);
 	
 	glGenTextures(1, &OGLRef.texGColorID);
@@ -987,13 +1001,15 @@ Render3DError OpenGLRenderer_3_2::CreateFBOs()
 	
 	glActiveTexture(GL_TEXTURE0);
 	
-	memset(OGLRef.workingCIColorBuffer, 0, sizeof(OGLRef.workingCIColorBuffer));
+	CACHE_ALIGN GLint tempClearImageBuffer[GPU_FRAMEBUFFER_NATIVE_WIDTH * GPU_FRAMEBUFFER_NATIVE_HEIGHT];
+	memset(tempClearImageBuffer, 0, sizeof(tempClearImageBuffer));
+	
 	glBindTexture(GL_TEXTURE_2D, OGLRef.texCIColorID);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GPU_FRAMEBUFFER_NATIVE_WIDTH, GPU_FRAMEBUFFER_NATIVE_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8_REV, OGLRef.workingCIColorBuffer);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GPU_FRAMEBUFFER_NATIVE_WIDTH, GPU_FRAMEBUFFER_NATIVE_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8_REV, tempClearImageBuffer);
 	
 	glBindTexture(GL_TEXTURE_2D, OGLRef.texCIDepthStencilID);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -1001,21 +1017,14 @@ Render3DError OpenGLRenderer_3_2::CreateFBOs()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, GPU_FRAMEBUFFER_NATIVE_WIDTH, GPU_FRAMEBUFFER_NATIVE_HEIGHT, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
-	
-	glBindTexture(GL_TEXTURE_2D, OGLRef.texCIPolyID);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GPU_FRAMEBUFFER_NATIVE_WIDTH, GPU_FRAMEBUFFER_NATIVE_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, GPU_FRAMEBUFFER_NATIVE_WIDTH, GPU_FRAMEBUFFER_NATIVE_HEIGHT, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, tempClearImageBuffer);
 	
 	glBindTexture(GL_TEXTURE_2D, OGLRef.texCIFogAttrID);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GPU_FRAMEBUFFER_NATIVE_WIDTH, GPU_FRAMEBUFFER_NATIVE_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GPU_FRAMEBUFFER_NATIVE_WIDTH, GPU_FRAMEBUFFER_NATIVE_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8_REV, tempClearImageBuffer);
 	
 	glBindTexture(GL_TEXTURE_2D, 0);
 	
@@ -1025,7 +1034,6 @@ Render3DError OpenGLRenderer_3_2::CreateFBOs()
 	
 	glBindFramebuffer(GL_FRAMEBUFFER, OGLRef.fboClearImageID);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, OGLRef.texCIColorID, 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, OGLRef.texCIPolyID, 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, OGLRef.texCIFogAttrID, 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, OGLRef.texCIDepthStencilID, 0);
 	
@@ -1072,7 +1080,6 @@ void OpenGLRenderer_3_2::DestroyFBOs()
 	glDeleteFramebuffers(1, &OGLRef.fboRenderID);
 	glDeleteTextures(1, &OGLRef.texCIColorID);
 	glDeleteTextures(1, &OGLRef.texCIFogAttrID);
-	glDeleteTextures(1, &OGLRef.texCIPolyID);
 	glDeleteTextures(1, &OGLRef.texCIDepthStencilID);
 	glDeleteTextures(1, &OGLRef.texGColorID);
 	glDeleteTextures(1, &OGLRef.texGPolyID);
@@ -1397,7 +1404,6 @@ Render3DError OpenGLRenderer_3_2::CreateGeometryPrograms()
 		glGenBuffers(1, &OGLRef.tboPolyStatesID);
 		glBindBuffer(GL_TEXTURE_BUFFER, OGLRef.tboPolyStatesID);
 		glBufferData(GL_TEXTURE_BUFFER, POLYLIST_SIZE * sizeof(OGLPolyStates), NULL, GL_DYNAMIC_DRAW);
-		glBindBuffer(GL_TEXTURE_BUFFER, 0);
 		
 		glGenTextures(1, &OGLRef.texPolyStatesID);
 		glActiveTexture(GL_TEXTURE0 + OGLTextureUnitID_PolyStates);
@@ -2103,65 +2109,67 @@ Render3DError OpenGLRenderer_3_2::BeginRender(const GFX3D &engine)
 		return OGLERROR_BEGINGL_FAILED;
 	}
 	
-	// Since glReadPixels() is called at the end of every render, we know that rendering
-	// must be synchronized at that time. Therefore, GL_MAP_UNSYNCHRONIZED_BIT should be
-	// safe to use.
+	glBindBuffer(GL_ARRAY_BUFFER, OGLRef.vboGeometryVtxID);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, OGLRef.iboGeometryIndexID);
 	
-	glBindBuffer(GL_UNIFORM_BUFFER, OGLRef.uboRenderStatesID);
-	OGLRenderStates *state = (OGLRenderStates *)glMapBufferRange(GL_UNIFORM_BUFFER, 0, sizeof(OGLRenderStates), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
+	// Copy the vertex data to the GPU asynchronously due to the potentially large upload size.
+	// This buffer write will need to be synchronized before we start drawing.
+	if (this->_syncBufferSetup != NULL)
+	{
+		glWaitSync(this->_syncBufferSetup, 0, GL_TIMEOUT_IGNORED);
+		glDeleteSync(this->_syncBufferSetup);
+	}
 	
-	state->enableAntialiasing = (engine.renderState.enableAntialiasing) ? GL_TRUE : GL_FALSE;
-	state->enableFogAlphaOnly = (engine.renderState.enableFogAlphaOnly) ? GL_TRUE : GL_FALSE;
-	state->clearPolyID = this->_clearAttributes.opaquePolyID;
-	state->clearDepth = (GLfloat)this->_clearAttributes.depth / (GLfloat)0x00FFFFFF;
-	state->alphaTestRef = divide5bitBy31_LUT[engine.renderState.alphaTestRef];
-	state->fogColor.r = divide5bitBy31_LUT[(engine.renderState.fogColor      ) & 0x0000001F];
-	state->fogColor.g = divide5bitBy31_LUT[(engine.renderState.fogColor >>  5) & 0x0000001F];
-	state->fogColor.b = divide5bitBy31_LUT[(engine.renderState.fogColor >> 10) & 0x0000001F];
-	state->fogColor.a = divide5bitBy31_LUT[(engine.renderState.fogColor >> 16) & 0x0000001F];
-	state->fogOffset = (GLfloat)(engine.renderState.fogOffset & 0x7FFF) / 32767.0f;
-	state->fogStep = (GLfloat)(0x0400 >> engine.renderState.fogShift) / 32767.0f;
+	const size_t vtxBufferSize = sizeof(VERT) * engine.vertListCount;
+	VERT *vtxPtr = (VERT *)glMapBufferRange(GL_ARRAY_BUFFER, 0, vtxBufferSize, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
+	memcpy(vtxPtr, engine.vertList, vtxBufferSize);
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+	
+	this->_syncBufferSetup = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+	
+	// Set up rendering states that will remain constant for the entire frame.
+	this->_pendingRenderStates.enableAntialiasing = (engine.renderState.enableAntialiasing) ? GL_TRUE : GL_FALSE;
+	this->_pendingRenderStates.enableFogAlphaOnly = (engine.renderState.enableFogAlphaOnly) ? GL_TRUE : GL_FALSE;
+	this->_pendingRenderStates.clearPolyID = this->_clearAttributes.opaquePolyID;
+	this->_pendingRenderStates.clearDepth = (GLfloat)this->_clearAttributes.depth / (GLfloat)0x00FFFFFF;
+	this->_pendingRenderStates.alphaTestRef = divide5bitBy31_LUT[engine.renderState.alphaTestRef];
+	this->_pendingRenderStates.fogColor.r = divide5bitBy31_LUT[(engine.renderState.fogColor      ) & 0x0000001F];
+	this->_pendingRenderStates.fogColor.g = divide5bitBy31_LUT[(engine.renderState.fogColor >>  5) & 0x0000001F];
+	this->_pendingRenderStates.fogColor.b = divide5bitBy31_LUT[(engine.renderState.fogColor >> 10) & 0x0000001F];
+	this->_pendingRenderStates.fogColor.a = divide5bitBy31_LUT[(engine.renderState.fogColor >> 16) & 0x0000001F];
+	this->_pendingRenderStates.fogOffset = (GLfloat)(engine.renderState.fogOffset & 0x7FFF) / 32767.0f;
+	this->_pendingRenderStates.fogStep = (GLfloat)(0x0400 >> engine.renderState.fogShift) / 32767.0f;
 	
 	for (size_t i = 0; i < 32; i++)
 	{
-		state->fogDensity[i].r = (engine.renderState.fogDensityTable[i] == 127) ? 1.0f : (GLfloat)engine.renderState.fogDensityTable[i] / 128.0f;
-		state->fogDensity[i].g = 0.0f;
-		state->fogDensity[i].b = 0.0f;
-		state->fogDensity[i].a = 0.0f;
+		this->_pendingRenderStates.fogDensity[i].r = (engine.renderState.fogDensityTable[i] == 127) ? 1.0f : (GLfloat)engine.renderState.fogDensityTable[i] / 128.0f;
+		this->_pendingRenderStates.fogDensity[i].g = 0.0f;
+		this->_pendingRenderStates.fogDensity[i].b = 0.0f;
+		this->_pendingRenderStates.fogDensity[i].a = 0.0f;
 	}
 	
 	const GLfloat edgeColorAlpha = (engine.renderState.enableAntialiasing) ? (16.0f/31.0f) : 1.0f;
 	for (size_t i = 0; i < 8; i++)
 	{
-		state->edgeColor[i].r = divide5bitBy31_LUT[(engine.renderState.edgeMarkColorTable[i]      ) & 0x001F];
-		state->edgeColor[i].g = divide5bitBy31_LUT[(engine.renderState.edgeMarkColorTable[i] >>  5) & 0x001F];
-		state->edgeColor[i].b = divide5bitBy31_LUT[(engine.renderState.edgeMarkColorTable[i] >> 10) & 0x001F];
-		state->edgeColor[i].a = edgeColorAlpha;
+		this->_pendingRenderStates.edgeColor[i].r = divide5bitBy31_LUT[(engine.renderState.edgeMarkColorTable[i]      ) & 0x001F];
+		this->_pendingRenderStates.edgeColor[i].g = divide5bitBy31_LUT[(engine.renderState.edgeMarkColorTable[i] >>  5) & 0x001F];
+		this->_pendingRenderStates.edgeColor[i].b = divide5bitBy31_LUT[(engine.renderState.edgeMarkColorTable[i] >> 10) & 0x001F];
+		this->_pendingRenderStates.edgeColor[i].a = edgeColorAlpha;
 	}
 	
 	for (size_t i = 0; i < 32; i++)
 	{
-		state->toonColor[i].r = divide5bitBy31_LUT[(engine.renderState.u16ToonTable[i]      ) & 0x001F];
-		state->toonColor[i].g = divide5bitBy31_LUT[(engine.renderState.u16ToonTable[i] >>  5) & 0x001F];
-		state->toonColor[i].b = divide5bitBy31_LUT[(engine.renderState.u16ToonTable[i] >> 10) & 0x001F];
-		state->toonColor[i].a = 1.0f;
+		this->_pendingRenderStates.toonColor[i].r = divide5bitBy31_LUT[(engine.renderState.u16ToonTable[i]      ) & 0x001F];
+		this->_pendingRenderStates.toonColor[i].g = divide5bitBy31_LUT[(engine.renderState.u16ToonTable[i] >>  5) & 0x001F];
+		this->_pendingRenderStates.toonColor[i].b = divide5bitBy31_LUT[(engine.renderState.u16ToonTable[i] >> 10) & 0x001F];
+		this->_pendingRenderStates.toonColor[i].a = 1.0f;
 	}
 	
-	glUnmapBuffer(GL_UNIFORM_BUFFER);
+	glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(this->_pendingRenderStates), &this->_pendingRenderStates);
 	
-	// Do per-poly setup
-	glActiveTexture(GL_TEXTURE0 + OGLTextureUnitID_PolyStates);
-	glBindBuffer(GL_ARRAY_BUFFER, OGLRef.vboGeometryVtxID);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, OGLRef.iboGeometryIndexID);
-	glBindBuffer(GL_TEXTURE_BUFFER, OGLRef.tboPolyStatesID);
-	
+	// Set up the polygon states.
 	this->_renderNeedsDepthEqualsTest = false;
-	
-	size_t vertIndexCount = 0;
-	GLushort *indexPtr = (GLushort *)glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, engine.polylist->count * 6 * sizeof(GLushort), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
-	OGLPolyStates *polyStates = (OGLPolyStates *)glMapBufferRange(GL_TEXTURE_BUFFER, 0, engine.polylist->count * sizeof(OGLPolyStates), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
-	
-	for (size_t i = 0; i < engine.polylist->count; i++)
+	for (size_t i = 0, vertIndexCount = 0; i < engine.polylist->count; i++)
 	{
 		const POLY &thePoly = engine.polylist->list[engine.indexlist.list[i]];
 		const size_t polyType = thePoly.type;
@@ -2180,16 +2188,16 @@ Render3DError OpenGLRenderer_3_2::BeginRender(const GFX3D &engine)
 			// a buffer. For GFX3D_QUADS and GFX3D_QUAD_STRIP, we also add additional
 			// vertices here to convert them to GL_TRIANGLES, which are much easier
 			// to work with and won't be deprecated in future OpenGL versions.
-			indexPtr[vertIndexCount++] = vertIndex;
+			OGLRef.vertIndexBuffer[vertIndexCount++] = vertIndex;
 			if (!thePoly.isWireframe() && (thePoly.vtxFormat == GFX3D_QUADS || thePoly.vtxFormat == GFX3D_QUAD_STRIP))
 			{
 				if (j == 2)
 				{
-					indexPtr[vertIndexCount++] = vertIndex;
+					OGLRef.vertIndexBuffer[vertIndexCount++] = vertIndex;
 				}
 				else if (j == 3)
 				{
-					indexPtr[vertIndexCount++] = thePoly.vertIndexes[0];
+					OGLRef.vertIndexBuffer[vertIndexCount++] = thePoly.vertIndexes[0];
 				}
 			}
 		}
@@ -2211,6 +2219,42 @@ Render3DError OpenGLRenderer_3_2::BeginRender(const GFX3D &engine)
 		// Get the texture that is to be attached to this polygon.
 		this->_textureList[i] = this->GetLoadedTextureFromPolygon(thePoly, this->_enableTextureSampling);
 		
+		// Force the texture sampling method to clamp if we know that all of the texture coordinates
+		// of all of this polygon's vertices are either 0.0 or 1.0.
+		const GLvec2 tc[4] = {
+			{ vert[0].u / vert[0].w, vert[0].v / vert[0].w },
+			{ vert[1].u / vert[1].w, vert[1].v / vert[1].w },
+			{ vert[2].u / vert[2].w, vert[2].v / vert[2].w },
+			{ vert[3].u / vert[3].w, vert[3].v / vert[3].w }
+		};
+		
+		this->_willForceTextureSampleClampS[i] = ( ((tc[0].x > -0.0001f) && (tc[0].x < 0.0001f)) || ((tc[0].x > 0.9999f) && (tc[0].x < 1.0001f)) ) &&
+		                                         ( ((tc[1].x > -0.0001f) && (tc[1].x < 0.0001f)) || ((tc[1].x > 0.9999f) && (tc[1].x < 1.0001f)) ) &&
+		                                         ( ((tc[2].x > -0.0001f) && (tc[2].x < 0.0001f)) || ((tc[2].x > 0.9999f) && (tc[2].x < 1.0001f)) );
+		
+		this->_willForceTextureSampleClampT[i] = ( ((tc[0].y > -0.0001f) && (tc[0].y < 0.0001f)) || ((tc[0].y > 0.9999f) && (tc[0].y < 1.0001f)) ) &&
+		                                         ( ((tc[1].y > -0.0001f) && (tc[1].y < 0.0001f)) || ((tc[1].y > 0.9999f) && (tc[1].y < 1.0001f)) ) &&
+		                                         ( ((tc[2].y > -0.0001f) && (tc[2].y < 0.0001f)) || ((tc[2].y > 0.9999f) && (tc[2].y < 1.0001f)) );
+		
+		if (polyType == 4)
+		{
+			this->_willForceTextureSampleClampS[i] = this->_willForceTextureSampleClampS[i] && ( ((tc[3].x > -0.0001f) && (tc[3].x < 0.0001f)) || ((tc[3].x > 0.9999f) && (tc[3].x < 1.0001f)) );
+			this->_willForceTextureSampleClampT[i] = this->_willForceTextureSampleClampT[i] && ( ((tc[3].y > -0.0001f) && (tc[3].y < 0.0001f)) || ((tc[3].y > 0.9999f) && (tc[3].y < 1.0001f)) );
+		}
+	}
+	
+	// Replace the entire index buffer as a hint to the driver that we can orphan the index buffer and
+	// avoid a synchronization cost.
+	glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, sizeof(OGLRef.vertIndexBuffer), OGLRef.vertIndexBuffer);
+	
+	// Some drivers seem to have problems with glMapBufferRange() and GL_TEXTURE_BUFFER, causing
+	// certain polygons to intermittently flicker in certain games. Therefore, we'll use glMapBuffer()
+	// in this case in order to prevent these glitches from happening.
+	OGLPolyStates *polyStates = (OGLPolyStates *)glMapBuffer(GL_TEXTURE_BUFFER, GL_WRITE_ONLY);
+	for (size_t i = 0; i < engine.polylist->count; i++)
+	{
+		const POLY &thePoly = engine.polylist->list[engine.indexlist.list[i]];
+		
 		// Get all of the polygon states that can be handled within the shader.
 		const NDSTextureFormat packFormat = this->_textureList[i]->GetPackFormat();
 		
@@ -2228,15 +2272,9 @@ Render3DError OpenGLRenderer_3_2::BeginRender(const GFX3D &engine)
 		polyStates[i].TexSizeShiftS = thePoly.texParam.SizeShiftS; // Note that we are using the preshifted size of S
 		polyStates[i].TexSizeShiftT = thePoly.texParam.SizeShiftT; // Note that we are using the preshifted size of T
 	}
-	
-	glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 	glUnmapBuffer(GL_TEXTURE_BUFFER);
 	
-	const size_t vtxBufferSize = sizeof(VERT) * engine.vertListCount;
-	VERT *vtxPtr = (VERT *)glMapBufferRange(GL_ARRAY_BUFFER, 0, vtxBufferSize, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
-	memcpy(vtxPtr, engine.vertList, vtxBufferSize);
-	glUnmapBuffer(GL_ARRAY_BUFFER);
-	
+	// Set up the default draw call states.
 	this->_geometryProgramFlags.EnableWDepth = (engine.renderState.wbuffer) ? 1 : 0;
 	this->_geometryProgramFlags.EnableAlphaTest = (engine.renderState.enableAlphaTest) ? 1 : 0;
 	this->_geometryProgramFlags.EnableTextureSampling = (this->_enableTextureSampling) ? 1 : 0;
@@ -2370,21 +2408,21 @@ Render3DError OpenGLRenderer_3_2::UpdateToonTable(const u16 *toonTableBuffer)
 	return OGLERROR_NOERR;
 }
 
-Render3DError OpenGLRenderer_3_2::ClearUsingImage(const u16 *__restrict colorBuffer, const u32 *__restrict depthBuffer, const u8 *__restrict fogBuffer, const u8 *__restrict polyIDBuffer)
+Render3DError OpenGLRenderer_3_2::ClearUsingImage(const u16 *__restrict colorBuffer, const u32 *__restrict depthBuffer, const u8 *__restrict fogBuffer, const u8 opaquePolyID)
 {
 	OGLRenderRef &OGLRef = *this->ref;
 	
-	this->UploadClearImage(colorBuffer, depthBuffer, fogBuffer, polyIDBuffer);
+	this->UploadClearImage(colorBuffer, depthBuffer, fogBuffer, opaquePolyID);
 	
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, OGLRef.fboClearImageID);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, OGLRef.fboRenderID);
+	glDrawBuffers(3, GeometryDrawBuffersList[this->_geometryProgramFlags.DrawBuffersMode]);
 	
 	if (this->_enableEdgeMark)
 	{
-		// Blit the polygon ID buffer
-		glReadBuffer(GL_COLOR_ATTACHMENT1);
-		glDrawBuffer(GL_COLOR_ATTACHMENT1);
-		glBlitFramebuffer(0, GPU_FRAMEBUFFER_NATIVE_HEIGHT, GPU_FRAMEBUFFER_NATIVE_WIDTH, 0, 0, 0, this->_framebufferWidth, this->_framebufferHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		// Clear the polygon ID buffer
+		const GLfloat oglPolyID[4] = {(GLfloat)opaquePolyID/63.0f, 0.0f, 0.0f, 1.0f};
+		glClearBufferfv(GL_COLOR, 1, oglPolyID);
 	}
 	
 	if (this->_enableFog)
@@ -2401,20 +2439,19 @@ Render3DError OpenGLRenderer_3_2::ClearUsingImage(const u16 *__restrict colorBuf
 	glBlitFramebuffer(0, GPU_FRAMEBUFFER_NATIVE_HEIGHT, GPU_FRAMEBUFFER_NATIVE_WIDTH, 0, 0, 0, this->_framebufferWidth, this->_framebufferHeight, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT, GL_NEAREST);
 	
 	glBindFramebuffer(GL_FRAMEBUFFER, OGLRef.fboRenderID);
-	glDrawBuffers(3, GeometryDrawBuffersList[this->_geometryProgramFlags.DrawBuffersMode]);
 	
 	OGLRef.selectedRenderingFBO = (this->_enableMultisampledRendering) ? OGLRef.fboMSIntermediateRenderID : OGLRef.fboRenderID;
 	if (OGLRef.selectedRenderingFBO == OGLRef.fboMSIntermediateRenderID)
 	{
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, OGLRef.fboRenderID);
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, OGLRef.selectedRenderingFBO);
+		glDrawBuffers(3, GeometryDrawBuffersList[this->_geometryProgramFlags.DrawBuffersMode]);
 		
 		if (this->_enableEdgeMark)
 		{
-			// Blit the polygon ID buffer
-			glReadBuffer(GL_COLOR_ATTACHMENT1);
-			glDrawBuffer(GL_COLOR_ATTACHMENT1);
-			glBlitFramebuffer(0, 0, this->_framebufferWidth, this->_framebufferHeight, 0, 0, this->_framebufferWidth, this->_framebufferHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+			// Clear the polygon ID buffer
+			const GLfloat oglPolyID[4] = {(GLfloat)opaquePolyID/63.0f, 0.0f, 0.0f, 1.0f};
+			glClearBufferfv(GL_COLOR, 1, oglPolyID);
 		}
 		
 		if (this->_enableFog)
@@ -2431,7 +2468,6 @@ Render3DError OpenGLRenderer_3_2::ClearUsingImage(const u16 *__restrict colorBuf
 		glBlitFramebuffer(0, 0, this->_framebufferWidth, this->_framebufferHeight, 0, 0, this->_framebufferWidth, this->_framebufferHeight, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT, GL_NEAREST);
 		
 		glBindFramebuffer(GL_FRAMEBUFFER, OGLRef.selectedRenderingFBO);
-		glDrawBuffers(3, GeometryDrawBuffersList[this->_geometryProgramFlags.DrawBuffersMode]);
 	}
 	
 	return OGLERROR_NOERR;
@@ -2442,6 +2478,7 @@ Render3DError OpenGLRenderer_3_2::ClearUsingValues(const FragmentColor &clearCol
 	OGLRenderRef &OGLRef = *this->ref;
 	OGLRef.selectedRenderingFBO = (this->_enableMultisampledRendering) ? OGLRef.fboMSIntermediateRenderID : OGLRef.fboRenderID;
 	glBindFramebuffer(GL_FRAMEBUFFER, OGLRef.selectedRenderingFBO);
+	glDrawBuffers(3, GeometryDrawBuffersList[this->_geometryProgramFlags.DrawBuffersMode]);
 	
 	const GLfloat oglColor[4] = {divide6bitBy63_LUT[clearColor6665.r], divide6bitBy63_LUT[clearColor6665.g], divide6bitBy63_LUT[clearColor6665.b], divide5bitBy31_LUT[clearColor6665.a]};
 	glClearBufferfv(GL_COLOR, 0, oglColor); // texGColorID
@@ -2456,7 +2493,15 @@ Render3DError OpenGLRenderer_3_2::ClearUsingValues(const FragmentColor &clearCol
 	if (this->_enableFog)
 	{
 		const GLfloat oglFogAttr[4] = {(GLfloat)clearAttributes.isFogged, 0.0f, 0.0f, 1.0f};
-		glClearBufferfv(GL_COLOR, 2, oglFogAttr); // texGFogAttrID
+		
+		if (GeometryDrawBuffersList[this->_geometryProgramFlags.DrawBuffersMode][1] == GL_COLOR_ATTACHMENT2)
+		{
+			glClearBufferfv(GL_COLOR, 1, oglFogAttr);
+		}
+		else if (GeometryDrawBuffersList[this->_geometryProgramFlags.DrawBuffersMode][2] == GL_COLOR_ATTACHMENT2)
+		{
+			glClearBufferfv(GL_COLOR, 2, oglFogAttr);
+		}
 	}
 	
 	this->_needsZeroDstAlphaPass = (clearColor6665.a == 0);
@@ -2468,6 +2513,13 @@ void OpenGLRenderer_3_2::SetPolygonIndex(const size_t index)
 {
 	this->_currentPolyIndex = index;
 	glUniform1i(this->ref->uniformPolyStateIndex[this->_geometryProgramFlags.value], index);
+	
+	if (this->_syncBufferSetup != NULL)
+	{
+		glWaitSync(this->_syncBufferSetup, 0, GL_TIMEOUT_IGNORED);
+		glDeleteSync(this->_syncBufferSetup);
+		this->_syncBufferSetup = NULL;
+	}
 }
 
 Render3DError OpenGLRenderer_3_2::SetupPolygon(const POLY &thePoly, bool treatAsTranslucent, bool willChangeStencilBuffer)
@@ -2569,8 +2621,8 @@ Render3DError OpenGLRenderer_3_2::SetupTexture(const POLY &thePoly, size_t polyR
 	}
 	
 	glBindTexture(GL_TEXTURE_2D, theTexture->GetID());
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ((thePoly.texParam.RepeatS_Enable) ? ((thePoly.texParam.MirroredRepeatS_Enable) ? GL_MIRRORED_REPEAT : GL_REPEAT) : GL_CLAMP_TO_EDGE));
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ((thePoly.texParam.RepeatT_Enable) ? ((thePoly.texParam.MirroredRepeatT_Enable) ? GL_MIRRORED_REPEAT : GL_REPEAT) : GL_CLAMP_TO_EDGE));
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ((!this->_willForceTextureSampleClampS[polyRenderIndex] && thePoly.texParam.RepeatS_Enable) ? ((thePoly.texParam.MirroredRepeatS_Enable) ? GL_MIRRORED_REPEAT : GL_REPEAT) : GL_CLAMP_TO_EDGE));
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ((!this->_willForceTextureSampleClampT[polyRenderIndex] && thePoly.texParam.RepeatT_Enable) ? ((thePoly.texParam.MirroredRepeatT_Enable) ? GL_MIRRORED_REPEAT : GL_REPEAT) : GL_CLAMP_TO_EDGE));
 	
 	if (this->_enableTextureSmoothing)
 	{
