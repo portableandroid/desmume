@@ -28,7 +28,7 @@ endif
 include $(CLEAR_VARS)
 LOCAL_MODULE       := retro
 LOCAL_SRC_FILES    := $(SOURCES_CXX) $(SOURCES_C)
-LOCAL_CXXFLAGS     := $(COREFLAGS)
+LOCAL_CXXFLAGS     := $(COREFLAGS) -std=gnu++11
 LOCAL_CFLAGS       := $(COREFLAGS)
 LOCAL_LDFLAGS      := -Wl,-version-script=$(LIBRETRO_DIR)/link.T
 LOCAL_CPP_FEATURES := exceptions
