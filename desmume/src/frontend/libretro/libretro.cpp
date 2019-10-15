@@ -21,6 +21,11 @@
 
 #include "streams/file_stream.h"
 
+#ifdef PORTANDROID
+#define DEBUG_LEVEL 1
+#include "emu_init.h"
+#endif
+
 #ifdef HAVE_OPENGL
 #include "OGLRender.h"
 #include "OGLRender_3_2.h"
@@ -1334,13 +1339,64 @@ GPU3DInterface* core3DList[] =
     NULL
 };
 
+#ifdef PORTANDROID
+
+int PBSNDInit(int frame_size) {
+	printf_2("[%s] buffer frame size = %d", __FUNCTION__, frame_size);
+	return 0;
+}
+
+void PBSNDDeInit() {}
+
+u32 PBSNDGetAudioSpace() {
+	unsigned aud_seg_len = 0;
+	cb_itf.cb_audio_buffer_get(NULL, NULL, &aud_seg_len);
+	// return buffer space counted by audio frames, double segment length
+	printf_2("[%s] free frame size = %d", __FUNCTION__, aud_seg_len >> 1U);
+	return aud_seg_len >> 1U;
+}
+
+void PBSNDMuteAudio() {
+	cb_itf.cb_audio_volume_mute_set(cb_true);
+}
+
+void PBSNDUnMuteAudio() {
+	cb_itf.cb_audio_volume_mute_set(cb_false);
+}
+
+void PBSNDSetVolume(int volume) {}
+
+void PBSNDUpdateAudio(s16 *buffer, u32 num_frames) {
+	printf_2("[%s] buffer=0x%lx, update frames size = %d", __FUNCTION__, (long)buffer, num_frames);
+	audio_batch_cb(buffer, num_frames);
+}
+
+SoundInterface_struct SNDRetro = {
+    0,
+    "PB Sound Interface",
+    PBSNDInit,
+    PBSNDDeInit,
+    PBSNDUpdateAudio,
+    PBSNDGetAudioSpace,
+    PBSNDMuteAudio,
+    PBSNDUnMuteAudio,
+    PBSNDSetVolume,
+    NULL,
+    NULL,
+    NULL
+};
+
+#else
+
 int SNDRetroInit(int buffersize) { return 0; }
 void SNDRetroDeInit() {}
 u32 SNDRetroGetAudioSpace() { return 0; }
 void SNDRetroMuteAudio() {}
 void SNDRetroUnMuteAudio() {}
 void SNDRetroSetVolume(int volume) {}
-void SNDRetroUpdateAudio(s16 *buffer, u32 num_samples) {}
+void SNDRetroUpdateAudio(s16 *buffer, u32 num_samples) {
+}
+
 void SNDRetroFetchSamples(s16 *sampleBuffer, size_t sampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer)
 {
     audio_batch_cb(sampleBuffer, sampleCount);
@@ -1360,6 +1416,8 @@ SoundInterface_struct SNDRetro = {
     SNDRetroFetchSamples,
     NULL
 };
+
+#endif
 
 SoundInterface_struct *SNDCoreList[] = {
     &SNDRetro
@@ -1587,7 +1645,11 @@ void retro_init (void)
     }
 
     NDS_Init();
+#ifdef PORTANDROID
+    SPU_ChangeSoundCore(0, 735*4);
+#else
     SPU_ChangeSoundCore(0, 0);
+#endif
     SPU_SetSynchMode(ESynchMode_Synchronous, ESynchMethod_N);
 
     NDS_3D_ChangeCore(GPU3D_SOFTRASTERIZER);
