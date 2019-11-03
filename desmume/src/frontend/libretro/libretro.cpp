@@ -531,9 +531,9 @@ void retro_get_system_info(struct retro_system_info *info)
 
 static void update_layout_screen_buffers(LayoutData *layout)
 {
-#ifdef PORTANDROID
-	screen_buf = (uint16_t *)cb_context.video_buffer;
-#else
+//#ifdef PORTANDROID
+//	screen_buf = (uint16_t *)cb_context.video_buffer;
+//#else
     if (screen_buf == NULL || screen_buf_byte_size != layout->byte_size)
     {
         if (screen_buf)
@@ -543,7 +543,7 @@ static void update_layout_screen_buffers(LayoutData *layout)
         screen_buf_byte_size = layout->byte_size;
         memset(screen_buf, 0, screen_buf_byte_size);
     }
-#endif
+//#endif
     layout->dst  = (uint16_t *)(((uint8_t *) screen_buf) + layout->offset1);
     layout->dst2 = (uint16_t *)(((uint8_t *) screen_buf) + layout->offset2);
 }
@@ -1343,20 +1343,20 @@ GPU3DInterface* core3DList[] =
 };
 
 #ifdef PORTANDROID
-
-int PBSNDInit(int frame_size) {
-	printf_2("[%s] buffer frame size = %d", __FUNCTION__, frame_size);
+static size_t sound_buffer_size = 0;
+int PBSNDInit(int buffer_size) {
+	printf_2("[%s] buffer size = %d bytes", __FUNCTION__, buffer_size);
+	sound_buffer_size = buffer_size;
 	return 0;
 }
 
 void PBSNDDeInit() {}
 
 u32 PBSNDGetAudioSpace() {
-	unsigned aud_seg_len = 0;
-	cb_itf.cb_audio_buffer_get(NULL, NULL, &aud_seg_len);
-	// return buffer space counted by audio frames, double segment length
-	printf_2("[%s] free frame size = %d", __FUNCTION__, aud_seg_len >> 1U);
-	return aud_seg_len >> 1U;
+	unsigned aud_seg_frames = 0;
+	aud_seg_frames = sound_buffer_size / (sizeof(s16) * 2);
+	printf_2("[%s] free frames size = %d", __FUNCTION__, aud_seg_frames);
+	return aud_seg_frames;
 }
 
 void PBSNDMuteAudio() {
@@ -1367,11 +1367,28 @@ void PBSNDUnMuteAudio() {
 	cb_itf.cb_audio_volume_mute_set(cb_false);
 }
 
-void PBSNDSetVolume(int volume) {}
+void PBSNDSetVolume(int volume) {
+	s32 maxVol;
+	s32 ret = cb_itf.cb_audio_max_volume_get(&maxVol);
+	if(ret){
+		//get max volume failed, abort...
+		return;
+	}
 
-void PBSNDUpdateAudio(s16 *buffer, u32 num_frames) {
-	printf_2("[%s] buffer=0x%lx, update frames size = %d", __FUNCTION__, (long)buffer, num_frames);
-	audio_batch_cb(buffer, num_frames);
+	s32 level = 0;
+	if(volume == 100)
+		level = maxVol;
+	else if(volume >= 0)
+		level = ((float)maxVol / 100.0F)*volume;
+	else return;
+	
+	cb_itf.cb_audio_volume_set(level);
+
+}
+
+void PBSNDUpdateAudio(s16 *buffer, u32 num_samples) {
+	printf_2("[%s] buffer=0x%lx, frames size = %d", __FUNCTION__, (long)buffer, num_samples);
+	audio_batch_cb(buffer, num_samples);
 }
 
 SoundInterface_struct SNDRetro = {
@@ -1397,9 +1414,7 @@ u32 SNDRetroGetAudioSpace() { return 0; }
 void SNDRetroMuteAudio() {}
 void SNDRetroUnMuteAudio() {}
 void SNDRetroSetVolume(int volume) {}
-void SNDRetroUpdateAudio(s16 *buffer, u32 num_samples) {
-}
-
+void SNDRetroUpdateAudio(s16 *buffer, u32 num_samples) {}
 void SNDRetroFetchSamples(s16 *sampleBuffer, size_t sampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer)
 {
     audio_batch_cb(sampleBuffer, sampleCount);
@@ -1650,10 +1665,15 @@ void retro_init (void)
     NDS_Init();
 #ifdef PORTANDROID
     SPU_ChangeSoundCore(0, 735*4);
+	CommonSettings.SPU_sync_mode = ESynchMode_Synchronous; //ESynchMode_DualSynchAsynch;
+	CommonSettings.SPU_sync_method = ESynchMethod_N;
+	CommonSettings.spu_advanced = true;
+	CommonSettings.spuInterpolationMode = SPUInterpolation_Cosine;
+    SPU_SetSynchMode(CommonSettings.SPU_sync_mode, CommonSettings.SPU_sync_method);
 #else
     SPU_ChangeSoundCore(0, 0);
-#endif
     SPU_SetSynchMode(ESynchMode_Synchronous, ESynchMethod_N);
+#endif
 
     NDS_3D_ChangeCore(GPU3D_SOFTRASTERIZER);
     GPU->SetCustomFramebufferSize(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT);
@@ -1801,7 +1821,7 @@ void retro_run (void)
             ret |= (1 << i);
       }
    }
-   
+
    l_analog_x_ret = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
    l_analog_y_ret = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y);
    r_analog_x_ret = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X);
@@ -2192,16 +2212,19 @@ void retro_run (void)
    NDS_endProcessingInput();
 
    // RUN
-   frameIndex ++;
-   bool skipped = frameIndex <= frameSkip;
 #ifdef PORTANDROID
+	bool skipped = false;
 	if(cb_context.video_skip){
 		NDS_SkipNextFrame();
+		skipped = true;
 	}
 #else
+   frameIndex ++;
+   bool skipped = frameIndex <= frameSkip;
    if (skipped)
       NDS_SkipNextFrame();
 #endif
+
    NDS_exec<false>();
 
    SPU_Emulate_user();
@@ -2527,10 +2550,10 @@ bool retro_load_game_special(unsigned game_type, const struct retro_game_info *i
 void retro_unload_game (void)
 {
     NDS_FreeROM();
-#ifndef PORTANDROID
+//#ifndef PORTANDROID
     if (screen_buf)
        free(screen_buf);
-#endif
+//#endif
     screen_buf = NULL;
     execute    = 0;
 }
