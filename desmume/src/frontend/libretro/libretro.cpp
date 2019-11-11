@@ -1326,6 +1326,502 @@ static void check_variables(bool first_boot)
    }
 }
 
+#ifdef PORTANDROID
+
+static void check_variables_run()
+{
+	struct retro_variable var = {0};
+	bool need_framebuffer_reset = false;
+
+	var.key = "desmume_internal_resolution";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		char *pch;
+		char str[100];
+		snprintf(str, sizeof(str), "%s", var.value);
+
+		pch = strtok(str, "x");
+		if (pch)
+			GPU_LR_FRAMEBUFFER_NATIVE_WIDTH = strtoul(pch, NULL, 0);
+		pch = strtok(NULL, "x");
+		if (pch)
+			GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT = strtoul(pch, NULL, 0);
+
+		switch (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH)
+		{
+			case 256:
+				scale = 1;
+				break;
+			case 512:
+				scale = 2;
+				break;
+			case 768:
+				scale = 3;
+				break;
+			case 1024:
+				scale = 4;
+				break;
+			case 1280:
+				scale = 5;
+				break;
+			case 1536:
+				scale = 6;
+				break;
+			case 1792:
+				scale = 7;
+				break;
+			case 2048:
+				scale = 8;
+				break;
+			case 2304:
+				scale = 9;
+				break;
+			case 2560:
+				scale = 10;
+				break;
+		}
+
+		if ( GPU->GetCustomFramebufferWidth() != GPU_LR_FRAMEBUFFER_NATIVE_WIDTH) {
+			need_framebuffer_reset = true;
+		}
+	}
+
+	var.key = "desmume_num_cores";
+
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		CommonSettings.num_cores = var.value ? strtol(var.value, 0, 10) : 1;
+	}
+
+	var.key = "desmume_screens_layout";
+
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		static int old_layout_id      = -1;
+		unsigned new_layout_id        = 0;
+
+		if (!strcmp(var.value, "top/bottom"))
+			new_layout_id = LAYOUT_TOP_BOTTOM;
+		else if (!strcmp(var.value, "bottom/top"))
+			new_layout_id = LAYOUT_BOTTOM_TOP;
+		else if (!strcmp(var.value, "left/right"))
+			new_layout_id = LAYOUT_LEFT_RIGHT;
+		else if (!strcmp(var.value, "right/left"))
+			new_layout_id = LAYOUT_RIGHT_LEFT;
+		else if (!strcmp(var.value, "top only"))
+			new_layout_id = LAYOUT_TOP_ONLY;
+		else if (!strcmp(var.value, "bottom only"))
+			new_layout_id = LAYOUT_BOTTOM_ONLY;
+		else if(!strcmp(var.value, "hybrid/top"))
+			new_layout_id = LAYOUT_HYBRID_TOP_ONLY;
+		else if(!strcmp(var.value, "hybrid/bottom"))
+			new_layout_id = LAYOUT_HYBRID_BOTTOM_ONLY;
+
+		if (old_layout_id != new_layout_id)
+		{
+			old_layout_id = new_layout_id;
+			current_layout = new_layout_id;
+		}
+	}
+
+	/* Toggle item from game menu */
+	var.key = "menuItemToggleLayout";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
+	{
+		printf_1("[%s] menuItemToggleLayout", __FUNCTION__);
+		switch(current_layout){
+			case LAYOUT_TOP_BOTTOM:
+				current_layout = LAYOUT_LEFT_RIGHT;
+				if(gap_size()){
+					cb_itf.cb_frame_video_buffer_clean();
+				}
+				break;
+			case LAYOUT_BOTTOM_TOP:
+				current_layout = LAYOUT_RIGHT_LEFT;
+				if(gap_size()){
+					cb_itf.cb_frame_video_buffer_clean();
+				}
+				break;
+			case LAYOUT_LEFT_RIGHT:
+				current_layout = LAYOUT_TOP_BOTTOM;
+				if(gap_size()){
+					cb_itf.cb_frame_video_buffer_clean();
+				}
+				break;
+			case LAYOUT_RIGHT_LEFT:
+				current_layout = LAYOUT_BOTTOM_TOP;
+				if(gap_size()){
+					cb_itf.cb_frame_video_buffer_clean();
+				}
+				break;
+		}
+	}
+
+	var.key = "menuItemSwapScreen";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
+	{
+		printf_1("[%s] menuItemSwapScreen", __FUNCTION__);
+		switch(current_layout){
+			case LAYOUT_TOP_BOTTOM:
+				current_layout = LAYOUT_BOTTOM_TOP;
+				break;
+			case LAYOUT_BOTTOM_TOP:
+				current_layout = LAYOUT_TOP_BOTTOM;
+				break;
+			case LAYOUT_LEFT_RIGHT:
+				current_layout = LAYOUT_RIGHT_LEFT;
+				break;
+			case LAYOUT_RIGHT_LEFT:
+				current_layout = LAYOUT_LEFT_RIGHT;
+				break;
+			case LAYOUT_TOP_ONLY:
+				current_layout = LAYOUT_BOTTOM_ONLY;
+				break;
+			case LAYOUT_BOTTOM_ONLY:
+				current_layout = LAYOUT_TOP_ONLY;
+				break;
+			case LAYOUT_HYBRID_TOP_ONLY:
+				current_layout = LAYOUT_HYBRID_BOTTOM_ONLY;
+				//clean frame video buffer
+				cb_itf.cb_frame_video_buffer_clean();
+				break;
+			case LAYOUT_HYBRID_BOTTOM_ONLY:
+				current_layout = LAYOUT_HYBRID_TOP_ONLY;
+				//clean frame video buffer
+				cb_itf.cb_frame_video_buffer_clean();
+				break;
+		}
+	}
+
+	/* Toggle Item from front-end   */
+
+	var.key = "desmume_hybrid_layout_ratio";
+	hybrid_layout_ratio = 3;
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "2:1"))
+			hybrid_layout_ratio = 2;
+	}
+
+	var.key = "desmume_hybrid_layout_scale";
+	hybrid_layout_scale = 1;
+	if (scale < hybrid_layout_ratio && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			hybrid_layout_scale = hybrid_layout_ratio;
+	}
+
+	var.key = "desmume_pointer_mouse";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			mouse_enable = true;
+		else if (!strcmp(var.value, "disabled"))
+			mouse_enable = false;
+	}
+
+	var.key = "desmume_pointer_device_l";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "emulated"))
+			pointer_device_l = 1;
+		else if(!strcmp(var.value, "absolute"))
+			pointer_device_l = 2;
+		else if (!strcmp(var.value, "pressed"))
+			pointer_device_l = 3;
+		else
+			pointer_device_l=0;
+	}
+
+	var.key = "desmume_pointer_device_r";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "emulated"))
+			pointer_device_r = 1;
+		else if(!strcmp(var.value, "absolute"))
+			pointer_device_r = 2;
+		else if (!strcmp(var.value, "pressed"))
+			pointer_device_r = 3;
+		else
+			pointer_device_r=0;
+	}
+
+	var.key = "desmume_pointer_device_deadzone";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+		analog_stick_deadzone = (int)(atoi(var.value));
+
+	var.key = "desmume_pointer_type";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		touchEnabled = var.value && (!strcmp(var.value, "touch"));
+	}
+
+	var.key = "desmume_mouse_speed";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		mouse_speed = (float) atof(var.value);
+	}
+
+	var.key = "desmume_input_rotation";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		input_rotation = atoi(var.value);
+	}
+
+	var.key = "desmume_frameskip";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		frameSkip = var.value ? strtol(var.value, 0, 10) : 0;
+	}
+
+	var.key = "desmume_firmware_language";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		static const struct { const char* name; int id; } languages[] =
+			{
+				{ "Auto", -1 },
+				{ "Japanese", 0 },
+				{ "English", 1 },
+				{ "French", 2 },
+				{ "German", 3 },
+				{ "Italian", 4 },
+				{ "Spanish", 5 }
+			};
+
+		for (int i = 0; i < 7; i ++)
+		{
+			if (!strcmp(languages[i].name, var.value))
+			{
+				firmwareLanguage = languages[i].id;
+				if (firmwareLanguage == -1) firmwareLanguage = host_get_language();
+				break;
+			}
+		}
+	}
+
+	var.key = "desmume_opengl_shadow_polygon";
+	CommonSettings.OpenGL_Emulation_ShadowPolygon = true;
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "disabled"))
+			CommonSettings.OpenGL_Emulation_ShadowPolygon = false;
+	}
+
+	var.key = "desmume_opengl_special_zero_alpha";
+	CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending = true;
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "disabled"))
+			CommonSettings.OpenGL_Emulation_SpecialZeroAlphaBlending = false;
+	}
+
+	var.key = "desmume_opengl_nds_depth_calculation";
+	CommonSettings.OpenGL_Emulation_NDSDepthCalculation = true;
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "disabled"))
+			CommonSettings.OpenGL_Emulation_NDSDepthCalculation = false;
+	}
+
+	var.key = "desmume_opengl_depth_lequal_polygon_facing";
+	CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing = false;
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			CommonSettings.OpenGL_Emulation_DepthLEqualPolygonFacing = true;
+	}
+
+	var.key = "desmume_gfx_texture_smoothing";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			CommonSettings.GFX3D_Renderer_TextureSmoothing = true;
+		else if (!strcmp(var.value, "disabled"))
+			CommonSettings.GFX3D_Renderer_TextureSmoothing = false;
+	}
+
+	var.key = "desmume_gfx_multisampling";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "disabled"))
+		{
+			CommonSettings.GFX3D_Renderer_MultisampleSize = 1;
+		}
+		else
+		{
+			int newvalue = atoi(var.value);
+			CommonSettings.GFX3D_Renderer_MultisampleSize = newvalue;;
+		}
+	}
+
+	var.key = "desmume_gfx_highres_interpolate_color";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			CommonSettings.GFX3D_HighResolutionInterpolateColor = true;
+		else if (!strcmp(var.value, "disabled"))
+			CommonSettings.GFX3D_HighResolutionInterpolateColor = false;
+	}
+
+	var.key = "desmume_gfx_texture_deposterize";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			CommonSettings.GFX3D_Renderer_TextureDeposterize = true;
+		else if (!strcmp(var.value, "disabled"))
+			CommonSettings.GFX3D_Renderer_TextureDeposterize = false;
+	}
+
+	var.key = "desmume_gfx_texture_scaling";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		CommonSettings.GFX3D_Renderer_TextureScalingFactor = atoi(var.value);
+	}
+
+	var.key = "desmume_gfx_edgemark";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			CommonSettings.GFX3D_EdgeMark = true;
+		else if (!strcmp(var.value, "disabled"))
+			CommonSettings.GFX3D_EdgeMark = false;
+	}
+
+	var.key = "desmume_gfx_linehack";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			CommonSettings.GFX3D_LineHack = true;
+		else if (!strcmp(var.value, "disabled"))
+			CommonSettings.GFX3D_LineHack = false;
+	}
+
+	var.key = "desmume_gfx_txthack";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			CommonSettings.GFX3D_TXTHack = true;
+		else if (!strcmp(var.value, "disabled"))
+			CommonSettings.GFX3D_TXTHack = false;
+	}
+
+	var.key = "desmume_mic_mode";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "pattern"))
+			CommonSettings.micMode = TCommonSettings::InternalNoise;
+		else if(!strcmp(var.value, "sample"))
+			CommonSettings.micMode = TCommonSettings::Sample;
+		else if(!strcmp(var.value, "random"))
+			CommonSettings.micMode = TCommonSettings::Random;
+		else if(!strcmp(var.value, "physical"))
+			CommonSettings.micMode = TCommonSettings::Physical;
+	}
+
+	var.key = "desmume_pointer_device_acceleration_mod";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		analog_stick_acceleration_modifier = atoi(var.value);
+	}
+
+	var.key = "desmume_pointer_stylus_pressure";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		CommonSettings.StylusPressure = atoi(var.value);
+	}
+
+	var.key = "desmume_load_to_memory";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			CommonSettings.loadToMemory = true;
+		else if (!strcmp(var.value, "disabled"))
+			CommonSettings.loadToMemory = false;
+	}
+
+	var.key = "desmume_advanced_timing";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			CommonSettings.advanced_timing = true;
+		else if (!strcmp(var.value, "disabled"))
+			CommonSettings.advanced_timing = false;
+	}
+
+	var.key = "desmume_screens_gap";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if ((atoi(var.value)) != nds_screen_gap)
+		{
+			nds_screen_gap = atoi(var.value);
+			if (nds_screen_gap > NDS_MAX_SCREEN_GAP)
+				nds_screen_gap = NDS_MAX_SCREEN_GAP;
+		}
+	}
+
+	var.key = "desmume_hybrid_showboth_screens";
+
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			hybrid_layout_showbothscreens = true;
+		else if(!strcmp(var.value, "disabled"))
+			hybrid_layout_showbothscreens = false;
+	}
+
+	var.key = "desmume_hybrid_cursor_always_smallscreen";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if (!strcmp(var.value, "enabled"))
+			hybrid_cursor_always_smallscreen = true;
+		else if(!strcmp(var.value, "disabled"))
+			hybrid_cursor_always_smallscreen = false;
+	}
+
+	var.key = "desmume_pointer_colour";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	{
+		if(!strcmp(var.value, "white"))
+		{
+			pointer_colour = 0xFFFF;
+			pointer_color_32 = 0xFFFFFFFF;
+		}
+		else if (!strcmp(var.value, "black"))
+		{
+			pointer_colour = 0x0000;
+			pointer_color_32 = 0x00000000;
+		}
+		else if(!strcmp(var.value, "red"))
+		{
+			pointer_colour = 0xF800;
+			pointer_color_32 = 0xFF0000FF;
+		}
+		else if(!strcmp(var.value, "yellow"))
+		{
+			pointer_colour = 0xFFE0;
+			pointer_color_32 = 0x0000FFFF;
+		}
+		else if(!strcmp(var.value, "blue"))
+		{
+			pointer_colour = 0x001F;
+			pointer_color_32 = 0xFFFF0000;
+		}
+		else
+		{
+			pointer_colour = 0xFFFF;
+			pointer_color_32 = 0xFFFFFFFF;
+		}
+	}
+	else
+	{
+		pointer_colour = 0xFFFF;
+		pointer_color_32 = 0xFFFFFFFF;
+	}
+
+	if (need_framebuffer_reset)
+	{
+		GPU->SetCustomFramebufferSize(GPU_LR_FRAMEBUFFER_NATIVE_WIDTH, GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT);
+	}
+}
+
+#endif
+
 #define GPU3D_NULL           0
 #define GPU3D_SOFTRASTERIZER 1
 #define GPU3D_OPENGL_AUTO    2
@@ -1775,7 +2271,11 @@ void retro_run (void)
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
    {
+#ifdef PORTANDROID
+	   check_variables_run();
+#else
       check_variables(false);
+#endif
       struct retro_system_av_info new_av_info;
       retro_get_system_av_info(&new_av_info);
 
