@@ -35,6 +35,9 @@ struct RFILE;
 #define MAX_FW_NICKNAME_LENGTH 10
 #define MAX_FW_MESSAGE_LENGTH 26
 
+extern const char *defaultNickname;
+extern const char *defaultMessage;
+
 struct FirmwareConfig
 {
 	u8 consoleType;

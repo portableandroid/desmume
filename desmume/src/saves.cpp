@@ -1067,14 +1067,13 @@ bool savestate_save (const char *file_name)
 	size_t elems_written;
 	if (!savestate_save(ms))
 		return false;
-	FILE* file = (FILE*)fopen(file_name,"wb");
 
-	if(file)
-	{
-		elems_written = fwrite(ms.buf(),1,ms.size(),file);
-		fclose(file);
-		return (elems_written == ms.size());
-	} else return false;
+	EMUFILE_FILE file(file_name, "wb");
+	if(file.fail())
+		return false;
+
+	file.fwrite(ms.buf(), ms.size());
+	return true;
 }
 
 static void wifi_savestate(EMUFILE &os)

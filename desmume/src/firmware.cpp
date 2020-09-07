@@ -22,6 +22,7 @@
 #include "path.h"
 #include "encrypt.h"
 #include "wifi.h"
+#include "version.h"
 
 #include "streams/file_stream_transforms.h"
 
@@ -33,8 +34,8 @@
 #define DFC_FILE_SIZE (SETTINGS_SIZE + DFC_ID_SIZE)
 
 static _KEY1	enc(&MMU.ARM7_BIOS[0x0030]);
-static const char *defaultNickname = "DeSmuME";
-static const char *defaultMessage = "DeSmuME makes you happy!";
+const char *defaultNickname = DESMUME_NAME;
+const char *defaultMessage = DESMUME_NAME " makes you happy!";
 
 u16 CFIRMWARE::_getBootCodeCRC16(const u8 *arm9Data, const u32 arm9Size, const u8 *arm7Data, const u32 arm7Size)
 {

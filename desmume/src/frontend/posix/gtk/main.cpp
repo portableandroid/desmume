@@ -633,6 +633,8 @@ GPU3DInterface *core3DList[] = {
 #endif
 };
 
+int multisampleSizes[] = {0, 2, 4, 8, 16, 32};
+
 static const u16 gtk_kb_cfg[NB_KEYS] = {
     GDK_x,         // A
     GDK_z,         // B
@@ -2324,11 +2326,28 @@ static void GraphicsSettingsDialog() {
 
 #ifdef HAVE_OPENGL
 	// OpenGL Multisample
-	wMultisample = gtk_check_button_new_with_label("Multisample Antialiasing (OpenGL)");
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wMultisample), (CommonSettings.GFX3D_Renderer_MultisampleSize > 0) ? TRUE : FALSE);
-	gtk_table_attach(GTK_TABLE(wTable), wMultisample, 1, 2, 2, 3,
+	gsKey = gtk_label_new("Multisample Antialiasing (OpenGL):");
+	gtk_misc_set_alignment(GTK_MISC(gsKey), 0.0, 0.5);
+	gtk_table_attach(GTK_TABLE(wTable), gsKey, 0, 1, 4, 5,
 			static_cast<GtkAttachOptions>(GTK_EXPAND | GTK_FILL),
-			static_cast<GtkAttachOptions>(GTK_EXPAND | GTK_FILL), 10, 0);
+			static_cast<GtkAttachOptions>(GTK_EXPAND | GTK_FILL), 5, 0);
+
+	wMultisample = gtk_combo_box_text_new();
+	gtk_combo_box_text_insert_text(GTK_COMBO_BOX_TEXT(wMultisample), 0, "None");
+	gtk_combo_box_text_insert_text(GTK_COMBO_BOX_TEXT(wMultisample), 1, "2");
+	gtk_combo_box_text_insert_text(GTK_COMBO_BOX_TEXT(wMultisample), 2, "4");
+	gtk_combo_box_text_insert_text(GTK_COMBO_BOX_TEXT(wMultisample), 3, "8");
+	gtk_combo_box_text_insert_text(GTK_COMBO_BOX_TEXT(wMultisample), 4, "16");
+	gtk_combo_box_text_insert_text(GTK_COMBO_BOX_TEXT(wMultisample), 5, "32");
+
+	int currentMultisample = CommonSettings.GFX3D_Renderer_MultisampleSize;
+	int currentActive = 0;
+	// find smallest option that is larger than current value, i.e. round up to power of 2
+	while (multisampleSizes[currentActive] < currentMultisample && currentActive < 5) { currentActive++; }
+	gtk_combo_box_set_active(GTK_COMBO_BOX(wMultisample), currentActive);
+	gtk_table_attach(GTK_TABLE(wTable), wMultisample, 1, 2, 4, 5,
+			static_cast<GtkAttachOptions>(GTK_EXPAND | GTK_FILL),
+			static_cast<GtkAttachOptions>(GTK_EXPAND | GTK_FILL), 5, 0);
 #endif
 
 	// SoftRasterizer High Color Interpolation
@@ -2396,8 +2415,10 @@ static void GraphicsSettingsDialog() {
 		CommonSettings.GFX3D_Renderer_TextureScalingFactor = config.textureUpscale = scale;
 		CommonSettings.GFX3D_HighResolutionInterpolateColor = config.highColorInterpolation = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wHCInterpolate));
 #ifdef HAVE_OPENGL
-		config.multisampling = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wMultisample));
-		CommonSettings.GFX3D_Renderer_MultisampleSize = (config.multisampling) ? 4 : 0;
+		int selectedMultisample = gtk_combo_box_get_active(GTK_COMBO_BOX(wMultisample));
+		config.multisamplingSize = multisampleSizes[selectedMultisample];
+		config.multisampling = selectedMultisample != 0;
+		CommonSettings.GFX3D_Renderer_MultisampleSize = multisampleSizes[selectedMultisample];
 #endif
     }
     // End: OK Response Block
@@ -2598,6 +2619,7 @@ static void Modify_SPUMode(GtkAction *action, GtkRadioAction *current)
 static void Modify_SPUInterpolation(GtkAction *action, GtkRadioAction *current)
 {
     CommonSettings.spuInterpolationMode = (SPUInterpolationMode)gtk_radio_action_get_current_value(current);
+    config.audio_interpolation = CommonSettings.spuInterpolationMode;
 }
 
 static void Modify_Frameskip(GtkAction *action, GtkRadioAction *current)
@@ -3313,6 +3335,7 @@ common_gtk_main( class configured_features *my_config)
     gtk_action_group_add_radio_actions(action_group, spumode_entries, G_N_ELEMENTS(spumode_entries),
             config.audio_sync, G_CALLBACK(Modify_SPUMode), NULL);
 
+    CommonSettings.spuInterpolationMode = (SPUInterpolationMode)(config.audio_interpolation.get());
     gtk_action_group_add_radio_actions(action_group, spuinterpolation_entries, G_N_ELEMENTS(spuinterpolation_entries),
             CommonSettings.spuInterpolationMode, G_CALLBACK(Modify_SPUInterpolation), NULL);
 
@@ -3509,7 +3532,9 @@ common_gtk_main( class configured_features *my_config)
 	}
 
     CommonSettings.GFX3D_HighResolutionInterpolateColor = config.highColorInterpolation;
-	CommonSettings.GFX3D_Renderer_MultisampleSize = (config.multisampling) ? 4 : 0;
+	CommonSettings.GFX3D_Renderer_MultisampleSize = (config.multisamplingSize > 0)
+														? config.multisamplingSize
+														: config.multisampling ? 4 : 0;
     CommonSettings.GFX3D_Renderer_TextureDeposterize = config.textureDeposterize;
     CommonSettings.GFX3D_Renderer_TextureScalingFactor = (config.textureUpscale == 1 ||
     														config.textureUpscale == 2 ||

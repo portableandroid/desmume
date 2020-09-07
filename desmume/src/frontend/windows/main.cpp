@@ -1214,16 +1214,26 @@ void CheckMessages()
 
 	while( PeekMessage( &msg, 0, 0, 0, PM_NOREMOVE ) )
 	{
-		if( GetMessage( &msg, 0,  0, 0)>0 )
+		if (GetMessage(&msg, 0, 0, 0) > 0)
 		{
 			if (RamWatchHWnd && IsDialogMessage(RamWatchHWnd, &msg))
 			{
-				if(msg.message == WM_KEYDOWN) // send keydown messages to the dialog (for accelerators, and also needed for the Alt key to work)
+				if (msg.message == WM_KEYDOWN) // send keydown messages to the dialog (for accelerators, and also needed for the Alt key to work)
 					SendMessage(RamWatchHWnd, msg.message, msg.wParam, msg.lParam);
 				continue;
 			}
 			if (SoundView_GetHWnd() && IsDialogMessage(SoundView_GetHWnd(), &msg))
 				continue;
+
+			if (DisViewWnd[0] && msg.message == WM_MOUSEWHEEL && IsDialogMessage(DisViewWnd[0], &msg))
+			{
+				SendMessage(DisViewWnd[0], msg.message, msg.wParam, msg.lParam);
+			}
+
+			if (DisViewWnd[1] && msg.message == WM_MOUSEWHEEL && IsDialogMessage(DisViewWnd[1], &msg))
+			{
+				SendMessage(DisViewWnd[1], msg.message, msg.wParam, msg.lParam);
+			}
 
 			if(!TranslateAccelerator(hwnd,hAccel,&msg))
 			{
@@ -1493,7 +1503,7 @@ void NDS_UnPause(bool showMsg)
 		SPU_Pause(0);
 		if (showMsg) INFO("Emulation unpaused\n");
 
-		SetWindowText(MainWindow->getHWnd(), (char*)EMU_DESMUME_NAME_AND_VERSION());
+		UpdateTitle();
 		MainWindowToolbar->ChangeButtonBitmap(IDM_PAUSE, IDB_PAUSE);
 	}
 }
@@ -1638,7 +1648,7 @@ bool DemandLua()
 	HMODULE mod = LoadLibrary("lua51.dll");
 	if(!mod)
 	{
-		MessageBox(NULL, "lua51.dll was not found. Please get it into your PATH or in the same directory as desmume.exe", "DeSmuME", MB_OK | MB_ICONERROR);
+		MessageBox(NULL, "lua51.dll was not found. Please get it into your PATH or in the same directory as desmume.exe", DESMUME_NAME, MB_OK | MB_ICONERROR);
 		return false;
 	}
 	FreeLibrary(mod);
@@ -1856,7 +1866,7 @@ static void RefreshMicSettings()
 	{
 		if(!LoadSamples(MicSampleName))
 		{
-			MessageBox(NULL, "Unable to read the mic sample", "DeSmuME", (MB_OK | MB_ICONEXCLAMATION));
+			MessageBox(NULL, "Unable to read the mic sample", DESMUME_NAME, (MB_OK | MB_ICONEXCLAMATION));
 		}
 		else
 		{
@@ -1968,7 +1978,7 @@ int _main()
 	ColorCtrl_Register();
 	if (!RegWndClass("DeSmuME", WindowProcedure, CS_DBLCLKS, LoadIcon(hAppInst, MAKEINTRESOURCE(ICONDESMUME))))
 	{
-		MessageBox(NULL, "Error registering windows class", "DeSmuME", MB_OK);
+		MessageBox(NULL, "Error registering windows class", DESMUME_NAME, MB_OK);
 		exit(-1);
 	}
 
@@ -2107,7 +2117,7 @@ int _main()
 		WS_CAPTION | WS_SYSMENU | WS_SIZEBOX | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, 
 		NULL))
 	{
-		MessageBox(NULL, "Error creating main window", "DeSmuME", MB_OK);
+		MessageBox(NULL, "Error creating main window", DESMUME_NAME, MB_OK);
 		delete MainWindow;
 		exit(-1);
 	}
@@ -2129,7 +2139,7 @@ int _main()
 
 	if(MenuInit() == 0)
 	{
-		MessageBox(NULL, "Error creating main menu", "DeSmuME", MB_OK);
+		MessageBox(NULL, "Error creating main menu", DESMUME_NAME, MB_OK);
 		delete MainWindow;
 		exit(-1);
 	}
@@ -2483,7 +2493,7 @@ int _main()
 			CommonSettings.fwConfig.nickname[char_index] = temp_str[char_index];
 		}
 
-		GetPrivateProfileString("Firmware","Message", "DeSmuME makes you happy!", temp_str, 27, IniName);
+		GetPrivateProfileString("Firmware","Message", defaultMessage, temp_str, 27, IniName);
 		CommonSettings.fwConfig.messageLength = strlen( temp_str);
 		for ( char_index = 0; char_index < CommonSettings.fwConfig.messageLength; char_index++) {
 			CommonSettings.fwConfig.message[char_index] = temp_str[char_index];
@@ -2961,6 +2971,46 @@ void WavEnd()
 	NDS_UnPause();
 }
 
+void UpdateTitle(const char* currTitle)
+{
+	if (gameInfo.hasRomBanner())
+	{
+		if (currTitle == nullptr) {
+			currTitle = EMU_DESMUME_NAME_AND_VERSION();
+		}
+
+		char newTitle[512];
+		char gameTitle[128];
+
+		strcpy(newTitle, currTitle);
+
+		int newLength = strlen(newTitle);
+
+		const RomBanner& banner = gameInfo.getRomBanner();
+		sprintf(gameTitle, " | %ws", banner.titles[CommonSettings.fwConfig.language]);
+
+		int index = 0, gameLength = strlen(gameTitle);
+		for (int i = 0; i < gameLength; i++)
+		{
+			if (gameTitle[i] == '\n')
+			{
+				gameTitle[i] = ' ';
+				index = i;
+			}
+		}
+
+		if (index != 0)
+		{
+			gameTitle[index] = '\0';
+			if (newLength + gameLength < 512) strcat(newTitle + newLength, gameTitle); 
+		}
+
+		newTitle[511] = '\0'; // Stay safe
+
+		SetWindowText(MainWindow->getHWnd(), newTitle);
+	}
+}
+
 void UpdateToolWindows()
 {
 	Update_RAM_Search();	//Update_RAM_Watch() is also called; hotkey.cpp - HK_StateLoadSlot & State_Load also call these functions
@@ -3088,7 +3138,10 @@ static BOOL OpenCore(const char* filename)
 		memset(batteryPath, 0, MAX_PATH);
 		path.getpathnoext(path.BATTERY, batteryPath);
 		std::string batteryPathString = std::string(batteryPath) + ".dsv";
-		FILE *testFs = fopen(batteryPathString.c_str(), "rb+");
+		std::wstring batteryPathStringW = mbstowcs(batteryPathString);
+		FILE *testFs = _wfopen(batteryPathStringW.c_str(), L"rb");
+		if (testFs == NULL)
+			testFs = _wfopen(batteryPathStringW.c_str(), L"wb");
 		if (testFs == NULL)
 		{
 			msgbox->warn("\
@@ -3099,6 +3152,8 @@ Choose Config > Path Settings and ensure that the SaveRam directory exists and i
 		{
 			fclose(testFs);
 		}
+
+		UpdateTitle();		
 		
 		return TRUE;
 	}
@@ -3166,8 +3221,6 @@ LRESULT OpenFile()
 //		}
 //		return 0;
 //	}
-
-
 
 	return 0;
 }
@@ -4250,12 +4303,13 @@ DOKEYDOWN:
 
 	case WM_DROPFILES:
 		{
-			char filename[MAX_PATH] = "";
-			DragQueryFile((HDROP)wParam,0,filename,MAX_PATH);
+			wchar_t wfilename[MAX_PATH] = L"";
+			DragQueryFileW((HDROP)wParam,0,wfilename,MAX_PATH);
 			DragFinish((HDROP)wParam);
+			std::string fileDropped = wcstombs((std::wstring)wfilename);
+			const char* filename = fileDropped.c_str();
 			
 			//adelikat: dropping these in from FCEUX, I hope this is the best place for that
-			std::string fileDropped = filename;
 			//-------------------------------------------------------
 			//Check if Movie file
 			//-------------------------------------------------------
@@ -4323,7 +4377,7 @@ DOKEYDOWN:
 			//Else load it as a ROM
 			//-------------------------------------------------------
 
-			else if(OpenCoreSystemCP(filename))
+			else if(OpenCore(filename))
 			{
 				romloaded = TRUE;
 			}

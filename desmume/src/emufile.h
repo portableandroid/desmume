@@ -85,6 +85,8 @@ public:
 	virtual int fgetc() = 0;
 	virtual int fputc(int c) = 0;
 
+	virtual char* fgets(char* str, int num) = 0;
+
 	virtual size_t _fread(const void *ptr, size_t bytes) = 0;
 	virtual size_t fwrite(const void *ptr, size_t bytes) = 0;
 	
@@ -236,6 +238,11 @@ public:
 		return 0;
 	}
 
+	virtual char* fgets(char* str, int num)
+	{
+		throw "Not tested: emufile memory fgets";
+	}
+
 	virtual size_t _fread(const void *ptr, size_t bytes);
 	virtual size_t fwrite(const void *ptr, size_t bytes){
 		reserve(pos+(s32)bytes);
@@ -323,6 +330,7 @@ public:
 
 	virtual int fgetc();
 	virtual int fputc(int c);
+	virtual char* fgets(char* str, int num); 
 
 	virtual size_t _fread(const void *ptr, size_t bytes);
 	virtual size_t fwrite(const void *ptr, size_t bytes);

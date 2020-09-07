@@ -236,7 +236,11 @@ BackupDevice::BackupDevice()
 
 	MCLOG("MC: %s\n", _fileName.c_str());
 
-	bool fexists = filestream_exists(_fileName.c_str());
+	bool fexists = false;
+	{
+		EMUFILE_FILE testfile(_fileName, "rb");
+		fexists = testfile.is_open();
+	}
 
 	if (fexists && CommonSettings.backupSave)
 	{
