@@ -1492,6 +1492,12 @@ static void check_variables_run()
 		}
 	}
 
+    var.key = "menuItemMicInput";
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var)) {
+        printf_1("[%s] menuItemMicInput", __FUNCTION__);
+        MicrophoneToggle();
+    }
+
 	/* Toggle Item from front-end   */
 
 	var.key = "desmume_hybrid_layout_ratio";
@@ -2638,12 +2644,12 @@ void retro_run (void)
          0, // debug
          (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L2     )) //Lid
          );
-
+#ifndef PORTANDROID
    if (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L3))
       NDS_setMic(true);
    else
       NDS_setMic(false);
-
+#endif
    // BUTTONS
    NDS_beginProcessingInput();
 
