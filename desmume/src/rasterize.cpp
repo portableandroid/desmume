@@ -2097,6 +2097,13 @@ Render3DError SoftRasterizerRenderer::RenderGeometry()
 
 void SoftRasterizerRenderer::_UpdateEdgeMarkColorTable(const u16 *edgeMarkColorTable)
 {
+#ifdef PORTANDROID
+	if(edgeMarkColorTable == NULL) {
+		// Fix resume state crash!
+		return;
+	}
+#endif
+
 	//TODO: need to test and find out whether these get grabbed at flush time, or at render time
 	//we can do this by rendering a 3d frame and then freezing the system, but only changing the edge mark colors
 	for (size_t i = 0; i < 8; i++)
