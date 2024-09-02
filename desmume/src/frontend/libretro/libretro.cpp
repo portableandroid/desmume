@@ -531,9 +531,6 @@ void retro_get_system_info(struct retro_system_info *info)
 
 static void update_layout_screen_buffers(LayoutData *layout)
 {
-#ifdef PORTANDROID
-	screen_buf = (uint16_t *)cb_context.video_buffer;
-#else
     if (screen_buf == NULL || screen_buf_byte_size != layout->byte_size)
     {
         if (screen_buf)
@@ -543,7 +540,6 @@ static void update_layout_screen_buffers(LayoutData *layout)
         screen_buf_byte_size = layout->byte_size;
         memset(screen_buf, 0, screen_buf_byte_size);
     }
-#endif
     layout->dst  = (uint16_t *)(((uint8_t *) screen_buf) + layout->offset1);
     layout->dst2 = (uint16_t *)(((uint8_t *) screen_buf) + layout->offset2);
 }
@@ -3056,10 +3052,8 @@ bool retro_load_game_special(unsigned game_type, const struct retro_game_info *i
 void retro_unload_game (void)
 {
     NDS_FreeROM();
-#ifndef PORTANDROID
     if (screen_buf)
        free(screen_buf);
-#endif
     screen_buf = NULL;
     execute    = 0;
 }
